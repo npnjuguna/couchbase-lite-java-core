@@ -74,7 +74,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
     @InterfaceAudience.Public
     public boolean isRunning() {
         if (replicationInternal == null) {
-            throw new IllegalStateException("No ReplicationInternal object");
+            return false;
         }
         return replicationInternal.stateMachine.isInState(ReplicationState.RUNNING);
     }
@@ -84,8 +84,9 @@ public class Replication implements ReplicationInternal.ChangeListener {
      */
     @InterfaceAudience.Public
     public void stop() {
-
-
+        if (replicationInternal != null) {
+            replicationInternal.triggerStop();
+        }
     }
 
     /**

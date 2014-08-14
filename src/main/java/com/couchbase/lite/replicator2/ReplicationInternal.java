@@ -53,9 +53,14 @@ class ReplicationInternal {
      * Trigger this replication to start (async)
      */
     public void triggerStart() {
-
         stateMachine.fire(ReplicationTrigger.START);
+    }
 
+    /**
+     * Trigger this replication to stop (async)
+     */
+    public void triggerStop() {
+        stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
     }
 
     /**
@@ -117,11 +122,32 @@ class ReplicationInternal {
                 ReplicationTrigger.START,
                 ReplicationState.RUNNING
         );
+
+        stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.START);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.STOP_GRACEFUL);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_GRACEFUL);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_IMMEDIATE);
+
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new ActionReplicationStarted());
         stateMachine.configure(ReplicationState.RUNNING).permit(
                 ReplicationTrigger.STOP_IMMEDIATE,
                 ReplicationState.STOPPED
         );
+        stateMachine.configure(ReplicationState.RUNNING).permit(
+                ReplicationTrigger.STOP_GRACEFUL,
+                ReplicationState.STOPPING
+        );
+        stateMachine.configure(ReplicationState.STOPPING).permit(
+                ReplicationTrigger.STOP_IMMEDIATE,
+                ReplicationState.STOPPED
+        );
+        stateMachine.configure(ReplicationState.STOPPING).onEntry(new Action() {
+            @Override
+            public void doIt() {
+                // TODO: graceful shutdown of replicator
+                stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
+            }
+        });
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action() {
             @Override
             public void doIt() {
