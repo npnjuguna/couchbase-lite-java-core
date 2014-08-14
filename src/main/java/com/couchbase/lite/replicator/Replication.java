@@ -28,6 +28,7 @@ import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.URIUtils;
+import com.github.oxo42.stateless4j.StateMachine;
 
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
