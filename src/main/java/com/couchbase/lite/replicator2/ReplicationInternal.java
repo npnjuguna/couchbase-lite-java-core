@@ -1,6 +1,7 @@
 package com.couchbase.lite.replicator2;
 
 import com.couchbase.lite.Database;
+import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.util.Log;
@@ -10,6 +11,7 @@ import com.github.oxo42.stateless4j.transitions.Transition;
 
 import java.net.URL;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -25,6 +27,14 @@ abstract class ReplicationInternal {
     protected Database db;
     protected URL remote;
     protected HttpClientFactory clientFactory;
+    protected String lastSequence;
+    protected Authenticator authenticator;
+    protected String filterName;
+    protected Map<String, Object> filterParams;
+    protected List<String> documentIDs;
+    protected Map<String, Object> requestHeaders;
+    private String serverType;
+
 
     // the code assumes this is a _single threaded_ work executor.
     // if it's not, the behavior will be buggy.  I don't see a way to assert this in the code.
@@ -32,20 +42,20 @@ abstract class ReplicationInternal {
 
     protected StateMachine<ReplicationState, ReplicationTrigger> stateMachine;
     protected List<ChangeListener> changeListeners;
-    protected boolean isContinous;
+    protected Replication.Lifecycle lifecycle;
     protected ChangeListenerNotifyStyle changeListenerNotifyStyle;
 
     /**
      * Constructor
      */
-    ReplicationInternal(Database db, URL remote, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor, boolean isContinous, Replication parentReplication) {
+    ReplicationInternal(Database db, URL remote, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor, Replication.Lifecycle lifecycle, Replication parentReplication) {
 
         this.parentReplication = parentReplication;
         this.db = db;
         this.remote = remote;
         this.clientFactory = clientFactory;
         this.workExecutor = workExecutor;
-        this.isContinous = isContinous;
+        this.lifecycle = lifecycle;
 
         changeListeners = new CopyOnWriteArrayList<ChangeListener>();
 
@@ -80,33 +90,12 @@ abstract class ReplicationInternal {
     }
 
     /**
-     * Actual work of starting the replication process.  OK to block here,
-     * since it will only block the work executor, which may have multiple worker
-     * threads.
+     * Actual work of starting the replication process.
      */
-    protected void beginReplicating() {
-
-        Log.d(Log.TAG_SYNC, "startReplicating()");
-
-        if (!db.isOpen()) {
-
-            String msg = String.format("Db: %s is not open, abort replication", db);
-            parentReplication.setLastError(new Exception(msg));
-
-            stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
-
-        }
-
-        // startChangeTracker();
-
-        // start replicator ..
-
-
-    }
+    abstract protected void beginReplicating();
 
     /**
-     * Actual work of stopping the replication process.  OK to block here,
-     * since it will only block the work executor.
+     * Actual work of stopping the replication process.
      */
     protected void stopGraceful() {
 
@@ -214,15 +203,40 @@ abstract class ReplicationInternal {
         notifyChangeListeners(changeEvent);
     }
 
-
-
-
     /**
      * A delegate that can be used to listen for Replication changes.
      */
     @InterfaceAudience.Public
     public static interface ChangeListener {
         public void changed(Replication.ChangeEvent event);
+    }
+
+    public Authenticator getAuthenticator() {
+        return authenticator;
+    }
+
+    public void setAuthenticator(Authenticator authenticator) {
+        this.authenticator = authenticator;
+    }
+
+    @InterfaceAudience.Private
+    /* package */ boolean serverIsSyncGatewayVersion(String minVersion) {
+        String prefix = "Couchbase Sync Gateway/";
+        if (serverType == null) {
+            return false;
+        } else {
+            if (serverType.startsWith(prefix)) {
+                String versionString = serverType.substring(prefix.length());
+                return versionString.compareTo(minVersion) >= 0;
+            }
+
+        }
+        return false;
+    }
+
+    @InterfaceAudience.Private
+    /* package */ void setServerType(String serverType) {
+        this.serverType = serverType;
     }
 
 }

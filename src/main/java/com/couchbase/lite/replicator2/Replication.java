@@ -18,13 +18,14 @@ import java.util.concurrent.ScheduledExecutorService;
 public class Replication implements ReplicationInternal.ChangeListener {
 
     public enum Direction { PULL, PUSH };
+    public enum Lifecycle { ONESHOT, CONTINUOUS };
 
     protected Database db;
     protected URL remote;
     protected HttpClientFactory clientFactory;
     protected ScheduledExecutorService workExecutor;
     protected ReplicationInternal replicationInternal;
-    protected boolean isContinous;
+    protected Lifecycle lifecycle;
     protected List<ChangeListener> changeListeners;
     protected Throwable lastError;
 
@@ -50,6 +51,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
      */
     @InterfaceAudience.Private
     public Replication(Database db, URL remote, Direction direction, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor) {
+
         this.db = db;
         this.remote = remote;
         this.clientFactory = clientFactory;
@@ -63,7 +65,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
                         this.remote,
                         this.clientFactory,
                         this.workExecutor,
-                        this.isContinous,
+                        this.lifecycle,
                         this
                 );
                 break;
@@ -114,7 +116,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
      */
     @InterfaceAudience.Public
     public boolean isContinous() {
-        return isContinous;
+        return lifecycle == Lifecycle.CONTINUOUS;
     }
 
     /**
@@ -122,7 +124,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
      */
     @InterfaceAudience.Public
     public void setContinous(boolean isContinous) {
-        this.isContinous = isContinous;
+        this.lifecycle = Lifecycle.CONTINUOUS;
     }
 
     /**
