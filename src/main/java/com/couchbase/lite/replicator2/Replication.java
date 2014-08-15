@@ -4,6 +4,7 @@ import com.couchbase.lite.Database;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.github.oxo42.stateless4j.transitions.Transition;
 
 import java.net.URL;
 import java.util.List;
@@ -47,13 +48,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
         this.clientFactory = clientFactory;
         this.workExecutor = workExecutor;
         this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
-    }
 
-    /**
-     * Starts the replication, asynchronously.
-     */
-    @InterfaceAudience.Public
-    public void start() {
         replicationInternal = new ReplicationInternal(
                 this.db,
                 this.remote,
@@ -63,6 +58,14 @@ public class Replication implements ReplicationInternal.ChangeListener {
                 this
         );
         replicationInternal.addChangeListener(this);
+
+    }
+
+    /**
+     * Starts the replication, asynchronously.
+     */
+    @InterfaceAudience.Public
+    public void start() {
         replicationInternal.triggerStart();
     }
 
@@ -156,6 +159,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
     public static class ChangeEvent {
 
         private Replication source;
+        private ReplicationStateTransition transition;
 
         public ChangeEvent(Replication source) {
             this.source = source;
@@ -165,6 +169,13 @@ public class Replication implements ReplicationInternal.ChangeListener {
             return source;
         }
 
+        public ReplicationStateTransition getTransition() {
+            return transition;
+        }
+
+        public void setTransition(ReplicationStateTransition transition) {
+            this.transition = transition;
+        }
     }
 
 

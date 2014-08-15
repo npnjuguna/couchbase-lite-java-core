@@ -3,12 +3,16 @@ package com.couchbase.lite.replicator2;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.util.Log;
 import com.github.oxo42.stateless4j.StateMachine;
 import com.github.oxo42.stateless4j.delegates.Action;
+import com.github.oxo42.stateless4j.delegates.Action1;
+import com.github.oxo42.stateless4j.transitions.Transition;
 
 import java.net.URL;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
@@ -53,14 +57,24 @@ class ReplicationInternal {
      * Trigger this replication to start (async)
      */
     public void triggerStart() {
-        stateMachine.fire(ReplicationTrigger.START);
+        workExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                stateMachine.fire(ReplicationTrigger.START);
+            }
+        });
     }
 
     /**
      * Trigger this replication to stop (async)
      */
     public void triggerStop() {
-        stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
+        workExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
+            }
+        });
     }
 
     /**
@@ -69,6 +83,8 @@ class ReplicationInternal {
      * threads.
      */
     protected void startReplicating() {
+
+        Log.d(Log.TAG_SYNC, "startReplicating()");
 
         // startChangeTracker();
         if (!db.isOpen()) {
@@ -80,7 +96,32 @@ class ReplicationInternal {
 
         }
 
+        // start replicator ..
+
+
     }
+
+    /**
+     * Actual work of stopping the replication process.  OK to block here,
+     * since it will only block the work executor.
+     */
+    protected void stopGraceful() {
+
+        Log.d(Log.TAG_SYNC, "stopGraceful()");
+
+        // stop things and possibly wait for them to stop ..
+
+        try {
+            Log.d(Log.TAG_SYNC, "sleeping ..");
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
+
+    }
+
 
     /**
      * Notify all change listeners of a ChangeEvent
@@ -128,7 +169,13 @@ class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_GRACEFUL);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_IMMEDIATE);
 
-        stateMachine.configure(ReplicationState.RUNNING).onEntry(new ActionReplicationStarted());
+        stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
+            @Override
+            public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                notifyChangeListenersStateTransition(transition);
+                ReplicationInternal.this.startReplicating();
+            }
+        });
         stateMachine.configure(ReplicationState.RUNNING).permit(
                 ReplicationTrigger.STOP_IMMEDIATE,
                 ReplicationState.STOPPED
@@ -141,43 +188,29 @@ class ReplicationInternal {
                 ReplicationTrigger.STOP_IMMEDIATE,
                 ReplicationState.STOPPED
         );
-        stateMachine.configure(ReplicationState.STOPPING).onEntry(new Action() {
+        stateMachine.configure(ReplicationState.STOPPING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
-            public void doIt() {
-                // TODO: graceful shutdown of replicator
-                stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
+            public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                notifyChangeListenersStateTransition(transition);
+                ReplicationInternal.this.stopGraceful();
             }
         });
-        stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action() {
+        stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
-            public void doIt() {
-                Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(parentReplication);
-                notifyChangeListeners(changeEvent);
+            public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                notifyChangeListenersStateTransition(transition);
             }
         });
 
     }
 
-
-    /**
-     * When the replication is started, this action will be run.
-     * It's an async wrapper for the startReplicating() method.
-     */
-    class ActionReplicationStarted implements Action {
-
-        @Override
-        public void doIt() {
-
-            // This is run asynchronously on the work executor so that
-            // the state machine remains live/reactive.
-            ReplicationInternal.this.workExecutor.submit(new Runnable() {
-                @Override
-                public void run() {
-                    ReplicationInternal.this.startReplicating();
-                }
-            });
-        }
+    private void notifyChangeListenersStateTransition(Transition<ReplicationState, ReplicationTrigger> transition) {
+        Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(parentReplication);
+        ReplicationStateTransition replicationStateTransition = new ReplicationStateTransition(transition);
+        changeEvent.setTransition(replicationStateTransition);
+        notifyChangeListeners(changeEvent);
     }
+
 
     /**
      * A delegate that can be used to listen for Replication changes.

@@ -710,6 +710,9 @@ public final class Database {
         return new Puller(this, remote, continuous, manager.getWorkExecutor());
     }
 
+    public com.couchbase.lite.replicator2.Replication createPullReplication2(URL remote) {
+        return new com.couchbase.lite.replicator2.Puller(this, remote);
+    }
 
     /**
      * Adds a Database change delegate that will be called whenever a Document within the Database changes.
