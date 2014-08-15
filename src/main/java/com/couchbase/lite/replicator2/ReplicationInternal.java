@@ -5,6 +5,7 @@ import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.Utils;
 import com.github.oxo42.stateless4j.StateMachine;
 import com.github.oxo42.stateless4j.delegates.Action1;
 import com.github.oxo42.stateless4j.transitions.Transition;
@@ -49,6 +50,8 @@ abstract class ReplicationInternal {
      * Constructor
      */
     ReplicationInternal(Database db, URL remote, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor, Replication.Lifecycle lifecycle, Replication parentReplication) {
+
+        Utils.assertNotNull(lifecycle, "Must pass in a non-null lifecycle");
 
         this.parentReplication = parentReplication;
         this.db = db;
@@ -239,6 +242,13 @@ abstract class ReplicationInternal {
         this.serverType = serverType;
     }
 
+    public Replication.Lifecycle getLifecycle() {
+        return lifecycle;
+    }
+
+    public void setLifecycle(Replication.Lifecycle lifecycle) {
+        this.lifecycle = lifecycle;
+    }
 }
 
 

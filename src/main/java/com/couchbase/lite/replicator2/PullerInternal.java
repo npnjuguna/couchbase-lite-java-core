@@ -47,6 +47,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     }
 
+
+
     private void startChangeTracker() {
 
         ChangeTracker.ChangeTrackerMode changeTrackerMode;
@@ -86,22 +88,63 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     @Override
-    public void changeTrackerReceivedChange(Map<String, Object> change) {
-        Log.d(Log.TAG_SYNC, "changeTrackerReceivedChange: %s", change);
+    public void changeTrackerReceivedChange(final Map<String, Object> change) {
+        workExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                Log.d(Log.TAG_SYNC, "changeTrackerReceivedChange: %s", change);
+            }
+        });
     }
 
     @Override
     public void changeTrackerStopped(ChangeTracker tracker) {
 
+        workExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Log.d(Log.TAG_SYNC, "changeTrackerStopped.  lifecycle: %s", lifecycle);
+                    switch (lifecycle) {
+                        case ONESHOT:
+                            Log.d(Log.TAG_SYNC, "fire STOP_GRACEFUL");
+                            stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
+                            break;
+                        case CONTINUOUS:
+                            String msg = String.format("Change tracker stopped during continuous replication");
+                            parentReplication.setLastError(new Exception(msg));
+                            stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
+                            break;
+                        default:
+                            throw new RuntimeException(String.format("Unknown lifecycle: %s", lifecycle));
+
+                    }
+                } catch (RuntimeException e) {
+                    e.printStackTrace();
+                    throw e;
+                }
+            }
+        });
+
     }
 
     @Override
     public void changeTrackerFinished(ChangeTracker tracker) {
-
+        workExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                Log.d(Log.TAG_SYNC, "changeTrackerFinished");
+            }
+        });
     }
 
     @Override
     public void changeTrackerCaughtUp() {
-
+        workExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                Log.d(Log.TAG_SYNC, "changeTrackerCaughtUp");
+            }
+        });
     }
 }

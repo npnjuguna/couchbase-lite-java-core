@@ -57,6 +57,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
         this.clientFactory = clientFactory;
         this.workExecutor = workExecutor;
         this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
+        this.lifecycle = Lifecycle.ONESHOT;
 
         switch (direction) {
             case PULL:
@@ -124,7 +125,15 @@ public class Replication implements ReplicationInternal.ChangeListener {
      */
     @InterfaceAudience.Public
     public void setContinous(boolean isContinous) {
-        this.lifecycle = Lifecycle.CONTINUOUS;
+        if (isContinous) {
+            this.lifecycle = Lifecycle.CONTINUOUS;
+            replicationInternal.setLifecycle(Lifecycle.CONTINUOUS);
+        } else {
+            this.lifecycle = Lifecycle.ONESHOT;
+            replicationInternal.setLifecycle(Lifecycle.ONESHOT);
+
+        }
+
     }
 
     /**

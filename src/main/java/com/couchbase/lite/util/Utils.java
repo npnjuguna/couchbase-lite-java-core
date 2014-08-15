@@ -92,5 +92,10 @@ public class Utils {
         return new String(hexChars);
     }
 
+    public static void assertNotNull(Object o, String errMsg) {
+        if (o == null) {
+            throw new IllegalArgumentException(errMsg);
+        }
+    }
 
 }
