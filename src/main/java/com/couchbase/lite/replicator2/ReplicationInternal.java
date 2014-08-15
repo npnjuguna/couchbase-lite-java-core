@@ -5,20 +5,18 @@ import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.util.Log;
 import com.github.oxo42.stateless4j.StateMachine;
-import com.github.oxo42.stateless4j.delegates.Action;
 import com.github.oxo42.stateless4j.delegates.Action1;
 import com.github.oxo42.stateless4j.transitions.Transition;
 
 import java.net.URL;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * Internal Replication object that does the heavy lifting
  */
-class ReplicationInternal {
+abstract class ReplicationInternal {
 
     // Change listeners can be called back synchronously or asynchronously.
     protected enum ChangeListenerNotifyStyle { SYNC, ASYNC };
@@ -86,11 +84,10 @@ class ReplicationInternal {
      * since it will only block the work executor, which may have multiple worker
      * threads.
      */
-    protected void startReplicating() {
+    protected void beginReplicating() {
 
         Log.d(Log.TAG_SYNC, "startReplicating()");
 
-        // startChangeTracker();
         if (!db.isOpen()) {
 
             String msg = String.format("Db: %s is not open, abort replication", db);
@@ -99,6 +96,8 @@ class ReplicationInternal {
             stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
 
         }
+
+        // startChangeTracker();
 
         // start replicator ..
 
@@ -177,7 +176,7 @@ class ReplicationInternal {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 notifyChangeListenersStateTransition(transition);
-                ReplicationInternal.this.startReplicating();
+                ReplicationInternal.this.beginReplicating();
             }
         });
         stateMachine.configure(ReplicationState.RUNNING).permit(

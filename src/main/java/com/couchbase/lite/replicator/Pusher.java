@@ -54,6 +54,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
 
     /**
      * Constructor
+     * @exclude
      */
     @InterfaceAudience.Private
     /* package */ public Pusher(Database db, URL remote, boolean continuous, ScheduledExecutorService workExecutor) {

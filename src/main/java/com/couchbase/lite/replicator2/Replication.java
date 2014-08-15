@@ -17,6 +17,8 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 public class Replication implements ReplicationInternal.ChangeListener {
 
+    public enum Direction { PULL, PUSH };
+
     protected Database db;
     protected URL remote;
     protected HttpClientFactory clientFactory;
@@ -28,11 +30,14 @@ public class Replication implements ReplicationInternal.ChangeListener {
 
     /**
      * Constructor
+     * @exclude
      */
-    Replication(Database db, URL remote) {
+    @InterfaceAudience.Private
+    public Replication(Database db, URL remote, Direction direction) {
         this(
                 db,
                 remote,
+                direction,
                 new CouchbaseLiteHttpClientFactory(db.getPersistentCookieStore()),
                 Executors.newSingleThreadScheduledExecutor()
         );
@@ -41,22 +46,34 @@ public class Replication implements ReplicationInternal.ChangeListener {
 
     /**
      * Constructor
+     * @exclude
      */
-    Replication(Database db, URL remote, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor) {
+    @InterfaceAudience.Private
+    public Replication(Database db, URL remote, Direction direction, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor) {
         this.db = db;
         this.remote = remote;
         this.clientFactory = clientFactory;
         this.workExecutor = workExecutor;
         this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
 
-        replicationInternal = new ReplicationInternal(
-                this.db,
-                this.remote,
-                this.clientFactory,
-                this.workExecutor,
-                this.isContinous,
-                this
-        );
+        switch (direction) {
+            case PULL:
+                replicationInternal = new PullerInternal(
+                        this.db,
+                        this.remote,
+                        this.clientFactory,
+                        this.workExecutor,
+                        this.isContinous,
+                        this
+                );
+                break;
+            case PUSH:
+                throw new RuntimeException(String.format("TODO: %s", direction));
+                // break;
+            default:
+                throw new RuntimeException(String.format("Unknown direction: %s", direction));
+        }
+
         replicationInternal.addChangeListener(this);
 
     }

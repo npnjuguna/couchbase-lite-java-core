@@ -24,6 +24,7 @@ import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.replicator.Puller;
 import com.couchbase.lite.replicator.Pusher;
 import com.couchbase.lite.replicator.Replication;
+import com.couchbase.lite.replicator2.PullerInternal;
 import com.couchbase.lite.storage.ContentValues;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
@@ -711,7 +712,7 @@ public final class Database {
     }
 
     public com.couchbase.lite.replicator2.Replication createPullReplication2(URL remote) {
-        return new com.couchbase.lite.replicator2.Puller(this, remote);
+        return new com.couchbase.lite.replicator2.Replication(this, remote, com.couchbase.lite.replicator2.Replication.Direction.PULL);
     }
 
     /**
