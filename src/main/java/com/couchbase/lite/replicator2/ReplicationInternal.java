@@ -27,7 +27,11 @@ class ReplicationInternal {
     protected Database db;
     protected URL remote;
     protected HttpClientFactory clientFactory;
+
+    // the code assumes this is a _single threaded_ work executor.
+    // if it's not, the behavior will be buggy.  I don't see a way to assert this in the code.
     protected ScheduledExecutorService workExecutor;
+
     protected StateMachine<ReplicationState, ReplicationTrigger> stateMachine;
     protected List<ChangeListener> changeListeners;
     protected boolean isContinous;
@@ -210,6 +214,8 @@ class ReplicationInternal {
         changeEvent.setTransition(replicationStateTransition);
         notifyChangeListeners(changeEvent);
     }
+
+
 
 
     /**
