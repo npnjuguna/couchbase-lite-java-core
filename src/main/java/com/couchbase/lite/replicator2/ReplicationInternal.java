@@ -75,7 +75,12 @@ abstract class ReplicationInternal {
         workExecutor.submit(new Runnable() {
             @Override
             public void run() {
-                stateMachine.fire(ReplicationTrigger.START);
+                try {
+                    stateMachine.fire(ReplicationTrigger.START);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new RuntimeException(e);
+                }
             }
         });
     }
@@ -87,13 +92,47 @@ abstract class ReplicationInternal {
         workExecutor.submit(new Runnable() {
             @Override
             public void run() {
-                stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
+                try {
+                    stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new RuntimeException(e);
+                }
             }
         });
     }
 
     /**
-     * Actual work of starting the replication process.
+     * Start the replication process.
+     */
+    protected void start() {
+
+        if (!db.isOpen()) {
+
+            String msg = String.format("Db: %s is not open, abort replication", db);
+            parentReplication.setLastError(new Exception(msg));
+
+            stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
+
+            return;
+
+        }
+
+        // TODO:
+        // db.addActiveReplication();
+
+        // init batcher
+
+        // init authorizer / authenticator
+
+        // call goOnline (or trigger state change into online state)
+        
+
+    }
+
+    /**
+     * After successfully authenticating and getting remote checkpoint,
+     * begin the work of transferring documents.
      */
     abstract protected void beginReplicating();
 
@@ -130,8 +169,13 @@ abstract class ReplicationInternal {
             workExecutor.submit(new Runnable() {
                 @Override
                 public void run() {
-                    for (ChangeListener changeListener : changeListeners) {
-                        changeListener.changed(changeEvent);
+                    try {
+                        for (ChangeListener changeListener : changeListeners) {
+                            changeListener.changed(changeEvent);
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        throw new RuntimeException(e);
                     }
                 }
             });
@@ -168,7 +212,7 @@ abstract class ReplicationInternal {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 notifyChangeListenersStateTransition(transition);
-                ReplicationInternal.this.beginReplicating();
+                ReplicationInternal.this.start();
             }
         });
         stateMachine.configure(ReplicationState.RUNNING).permit(

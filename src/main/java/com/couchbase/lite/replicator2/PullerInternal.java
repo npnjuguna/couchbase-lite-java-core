@@ -30,16 +30,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         Log.d(Log.TAG_SYNC, "startReplicating()");
 
-        if (!db.isOpen()) {
 
-            String msg = String.format("Db: %s is not open, abort replication", db);
-            parentReplication.setLastError(new Exception(msg));
-
-            stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
-
-            return;
-
-        }
 
         startChangeTracker();
 
@@ -92,7 +83,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         workExecutor.submit(new Runnable() {
             @Override
             public void run() {
-                Log.d(Log.TAG_SYNC, "changeTrackerReceivedChange: %s", change);
+                try {
+                    Log.d(Log.TAG_SYNC, "changeTrackerReceivedChange: %s", change);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new RuntimeException(e);
+                }
             }
         });
     }
@@ -133,7 +129,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         workExecutor.submit(new Runnable() {
             @Override
             public void run() {
-                Log.d(Log.TAG_SYNC, "changeTrackerFinished");
+                try {
+                    Log.d(Log.TAG_SYNC, "changeTrackerFinished");
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new RuntimeException(e);
+                }
             }
         });
     }
@@ -143,7 +144,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         workExecutor.submit(new Runnable() {
             @Override
             public void run() {
-                Log.d(Log.TAG_SYNC, "changeTrackerCaughtUp");
+                try {
+                    Log.d(Log.TAG_SYNC, "changeTrackerCaughtUp");
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new RuntimeException(e);
+                }
             }
         });
     }
