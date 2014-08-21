@@ -89,7 +89,6 @@ public class Batcher<T> {
             try {
                 Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
                 future.get();
-
                 Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
                 finishedFutures.add(future);
             } catch (InterruptedException e) {
@@ -100,10 +99,6 @@ public class Batcher<T> {
 
         }
 
-        /*// remove the ones that we waited for
-        for (ScheduledFuture future : pendingFutures) {
-            pendingFutures.remove(future);
-        }*/
 
     }
 

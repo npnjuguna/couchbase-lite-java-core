@@ -33,7 +33,10 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -55,10 +58,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     protected int httpConnectionCount;
     protected CollectionUtils.Functor<RevisionInternal,RevisionInternal> revisionBodyTransformationBlock;
     protected Batcher<RevisionInternal> downloadsToInsert;
+    protected List<Future> pendingFutures;
 
 
     public PullerInternal(Database db, URL remote, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor, Replication.Lifecycle lifecycle, Replication parentReplication) {
         super(db, remote, clientFactory, workExecutor, lifecycle, parentReplication);
+        pendingFutures = new ArrayList<Future>();
     }
 
     /**
@@ -219,35 +224,33 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         //find the work to be done in a synchronized block
         List<RevisionInternal> workToStartNow = new ArrayList<RevisionInternal>();
         List<RevisionInternal> bulkWorkToStartNow = new ArrayList<RevisionInternal>();
-        // synchronized (this) {
-            while (httpConnectionCount + workToStartNow.size() < MAX_OPEN_HTTP_CONNECTIONS) {
-                int nBulk = 0;
-                if (bulkRevsToPull != null) {
-                    nBulk = (bulkRevsToPull.size() < MAX_REVS_TO_GET_IN_BULK) ? bulkRevsToPull.size() : MAX_REVS_TO_GET_IN_BULK;
-                }
-                if (nBulk == 1) {
-                    // Rather than pulling a single revision in 'bulk', just pull it normally:
-                    queueRemoteRevision(bulkRevsToPull.get(0));
-                    bulkRevsToPull.remove(0);
-                    nBulk = 0;
-                }
-                if (nBulk > 0) {
-                    // Prefer to pull bulk revisions:
-                    bulkWorkToStartNow.addAll(bulkRevsToPull.subList(0, nBulk));
-                    bulkRevsToPull.subList(0, nBulk).clear();
-                } else {
-                    // Prefer to pull an existing revision over a deleted one:
-                    List<RevisionInternal> queue = revsToPull;
-                    if (queue == null || queue.size() == 0) {
-                        queue = deletedRevsToPull;
-                        if (queue == null || queue.size() == 0)
-                            break;  // both queues are empty
-                    }
-                    workToStartNow.add(queue.get(0));
-                    queue.remove(0);
-                }
+        while (httpConnectionCount + workToStartNow.size() < MAX_OPEN_HTTP_CONNECTIONS) {
+            int nBulk = 0;
+            if (bulkRevsToPull != null) {
+                nBulk = (bulkRevsToPull.size() < MAX_REVS_TO_GET_IN_BULK) ? bulkRevsToPull.size() : MAX_REVS_TO_GET_IN_BULK;
             }
-        // }
+            if (nBulk == 1) {
+                // Rather than pulling a single revision in 'bulk', just pull it normally:
+                queueRemoteRevision(bulkRevsToPull.get(0));
+                bulkRevsToPull.remove(0);
+                nBulk = 0;
+            }
+            if (nBulk > 0) {
+                // Prefer to pull bulk revisions:
+                bulkWorkToStartNow.addAll(bulkRevsToPull.subList(0, nBulk));
+                bulkRevsToPull.subList(0, nBulk).clear();
+            } else {
+                // Prefer to pull an existing revision over a deleted one:
+                List<RevisionInternal> queue = revsToPull;
+                if (queue == null || queue.size() == 0) {
+                    queue = deletedRevsToPull;
+                    if (queue == null || queue.size() == 0)
+                        break;  // both queues are empty
+                }
+                workToStartNow.add(queue.get(0));
+                queue.remove(0);
+            }
+        }
 
         //actually run it outside the synchronized block
         if(bulkWorkToStartNow.size() > 0) {
@@ -344,7 +347,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         dl.setAuthenticator(getAuthenticator());
 
-        remoteRequestExecutor.execute(dl);
+        Future future = remoteRequestExecutor.submit(dl);
+        pendingFutures.add(future);
 
     }
 
@@ -492,7 +496,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         Map<String, Object> body = new HashMap<String, Object>();
         body.put("keys", keys);
 
-        sendAsyncRequest("POST",
+        Future future = sendAsyncRequest("POST",
                 "/_all_docs?include_docs=true",
                 body,
                 new RemoteRequestCompletionBlock() {
@@ -552,6 +556,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         pullRemoteRevisions();
                     }
                 });
+        pendingFutures.add(future);
     }
 
     /**
@@ -684,7 +689,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         //create a final version of this variable for the log statement inside
         //FIXME find a way to avoid this
         final String pathInside = path.toString();
-        sendAsyncMultipartDownloaderRequest("GET", pathInside, null, db, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncMultipartDownloaderRequest("GET", pathInside, null, db, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object result, Throwable e) {
@@ -716,6 +721,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 pullRemoteRevisions();
             }
         });
+        pendingFutures.add(future);
     }
 
     @InterfaceAudience.Private
@@ -937,6 +943,61 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     protected void stopGraceful() {
         super.stopGraceful();
+
         Log.d(Log.TAG_SYNC, "PullerInternal stopGraceful()");
+
+        // this has to be on a different thread than the replicator thread, or else it's a deadlock
+        // because it might be waiting for jobs that have been scheduled, and not
+        // yet executed (and which will never execute because this will block processing).
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+
+                try {
+                    // stop things and possibly wait for them to stop ..
+                    Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                    batcher.waitForPendingFutures();
+
+                    Log.d(Log.TAG_SYNC, "waitForPendingFutures()");
+                    waitForPendingFutures();
+
+                    Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
+                    downloadsToInsert.waitForPendingFutures();
+
+                    triggerStopImmediate();
+
+                    Log.e(Log.TAG_SYNC, "stopGraceful.run finished");
+
+
+                } catch (Exception e) {
+                    Log.e(Log.TAG_SYNC, "stopGraceful.run() had exception: %s", e);
+                    e.printStackTrace();
+                }
+
+            }
+        }).start();
+
     }
+
+    public void waitForPendingFutures() {
+
+        List<Future> finishedFutures = new ArrayList<Future>();
+
+        for (Future future : pendingFutures) {
+            try {
+                Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
+                future.get();
+                Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
+                finishedFutures.add(future);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } catch (ExecutionException e) {
+                e.printStackTrace();
+            }
+
+        }
+
+
+    }
+
 }

@@ -139,6 +139,20 @@ abstract class ReplicationInternal {
     }
 
     /**
+     * Trigger this replication to stop immediately -- assumes pending work has
+     * been drained, or that caller chooses to ignore any pending work.
+     */
+    protected void triggerStopImmediate() {
+        // all state machine triggers need to happen on the replicator thread
+        workExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
+            }
+        });
+    }
+
+    /**
      * Start the replication process.
      */
     protected void start() {
@@ -389,14 +403,15 @@ abstract class ReplicationInternal {
      * @exclude
      */
     @InterfaceAudience.Private
-    public void sendAsyncRequest(String method, String relativePath, Object body, RemoteRequestCompletionBlock onCompletion) {
+    public Future sendAsyncRequest(String method, String relativePath, Object body, RemoteRequestCompletionBlock onCompletion) {
         try {
             String urlStr = buildRelativeURLString(relativePath);
             URL url = new URL(urlStr);
-            sendAsyncRequest(method, url, body, onCompletion);
+            return sendAsyncRequest(method, url, body, onCompletion);
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
         }
+        return null;
     }
 
     /**
@@ -438,7 +453,7 @@ abstract class ReplicationInternal {
      * @exclude
      */
     @InterfaceAudience.Private
-    public void sendAsyncMultipartDownloaderRequest(String method, String relativePath, Object body, Database db, RemoteRequestCompletionBlock onCompletion) {
+    public Future sendAsyncMultipartDownloaderRequest(String method, String relativePath, Object body, Database db, RemoteRequestCompletionBlock onCompletion) {
         try {
 
             String urlStr = buildRelativeURLString(relativePath);
@@ -456,10 +471,14 @@ abstract class ReplicationInternal {
 
             request.setAuthenticator(getAuthenticator());
 
-            remoteRequestExecutor.execute(request);
+            Future future = remoteRequestExecutor.submit(request);
+            return future;
+
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
         }
+
+        return null;
     }
 
 
@@ -791,26 +810,7 @@ abstract class ReplicationInternal {
 
         Log.d(Log.TAG_SYNC, "stopGraceful()");
 
-        // this has to be on a different thread than the replicator thread, or else it's a deadlock
-        // because it might be waiting for jobs that have been scheduled, and not
-        // yet executed (and which will never execute because this will block processing).
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
 
-                // stop things and possibly wait for them to stop ..
-                Log.d(Log.TAG_SYNC, "waitForPendingFutures()");
-                batcher.waitForPendingFutures();
-
-                // all state machine triggers need to happen on the replicator thread
-                workExecutor.submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
-                    }
-                });
-            }
-        }).start();
 
 
 
