@@ -176,6 +176,10 @@ public class Replication implements ReplicationInternal.ChangeListener {
         this.lastError = lastError;
     }
 
+    /* package */ String remoteCheckpointDocID() {
+        return replicationInternal.remoteCheckpointDocID();
+    }
+
     /**
      * A delegate that can be used to listen for Replication changes.
      */
