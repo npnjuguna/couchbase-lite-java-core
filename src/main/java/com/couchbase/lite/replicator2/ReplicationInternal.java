@@ -318,6 +318,7 @@ abstract class ReplicationInternal {
 
     @InterfaceAudience.Private
     protected void setError(Throwable throwable) {
+
         // TODO
         /*
         if (error.code == NSURLErrorCancelled && $equal(error.domain, NSURLErrorDomain))
@@ -327,17 +328,9 @@ abstract class ReplicationInternal {
         if (throwable != error) {
             Log.e(Log.TAG_SYNC, "%s: Progress: set error = %s", this, throwable);
             error = throwable;
-            notifyChangeListeners();
-        }
-
-    }
-
-    @InterfaceAudience.Private
-    private void notifyChangeListeners() {
-        // TODO: re-enable this: updateProgress();
-        for (ChangeListener listener : changeListeners) {
-            Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this.parentReplication);
-            listener.changed(changeEvent);
+            Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
+            changeEvent.setError(error);
+            notifyChangeListeners(changeEvent);
         }
 
     }
@@ -372,7 +365,8 @@ abstract class ReplicationInternal {
     /* package */ void addToCompletedChangesCount(int delta) {
         int previousVal = getCompletedChangesCount().getAndAdd(delta);
         Log.v(Log.TAG_SYNC, "%s: Incrementing completedChangesCount count from %s by adding %d -> %d", this, previousVal, delta, completedChangesCount.get());
-        notifyChangeListeners();
+        Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
+        notifyChangeListeners(changeEvent);
     }
 
     @InterfaceAudience.Private
@@ -382,7 +376,8 @@ abstract class ReplicationInternal {
             Log.w(Log.TAG_SYNC, "Changes count is negative, this could indicate an error");
         }
         Log.v(Log.TAG_SYNC, "%s: Incrementing changesCount count from %s by adding %d -> %d", this, previousVal, delta, changesCount.get());
-        notifyChangeListeners();
+        Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
+        notifyChangeListeners(changeEvent);
     }
 
     public AtomicInteger getCompletedChangesCount() {
@@ -915,7 +910,7 @@ abstract class ReplicationInternal {
     }
 
     private void notifyChangeListenersStateTransition(Transition<ReplicationState, ReplicationTrigger> transition) {
-        Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(parentReplication);
+        Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
         ReplicationStateTransition replicationStateTransition = new ReplicationStateTransition(transition);
         changeEvent.setTransition(replicationStateTransition);
         notifyChangeListeners(changeEvent);

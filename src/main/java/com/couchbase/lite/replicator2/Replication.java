@@ -160,6 +160,8 @@ public class Replication implements ReplicationInternal.ChangeListener {
         }
     }
 
+
+
     /**
      * The error status of the replication, or null if there have not been any errors since
      * it started.
@@ -167,6 +169,22 @@ public class Replication implements ReplicationInternal.ChangeListener {
     @InterfaceAudience.Public
     public Throwable getLastError() {
         return lastError;
+    }
+
+    /**
+     * The number of completed changes processed, if the task is active, else 0 (observable).
+     */
+    @InterfaceAudience.Public
+    public int getCompletedChangesCount() {
+        return replicationInternal.getCompletedChangesCount().get();
+    }
+
+    /**
+     * The total number of changes to be processed, if the task is active, else 0 (observable).
+     */
+    @InterfaceAudience.Public
+    public int getChangesCount() {
+        return replicationInternal.getChangesCount().get();
     }
 
     /**
@@ -197,9 +215,14 @@ public class Replication implements ReplicationInternal.ChangeListener {
 
         private Replication source;
         private ReplicationStateTransition transition;
+        private int changeCount;
+        private int completedChangeCount;
+        private Throwable error;
 
-        public ChangeEvent(Replication source) {
-            this.source = source;
+        /* package */ ChangeEvent(ReplicationInternal replInternal) {
+            this.source = replInternal.parentReplication;
+            this.changeCount = replInternal.getChangesCount().get();
+            this.completedChangeCount =replInternal.getCompletedChangesCount().get();
         }
 
         public Replication getSource() {
@@ -212,6 +235,27 @@ public class Replication implements ReplicationInternal.ChangeListener {
 
         public void setTransition(ReplicationStateTransition transition) {
             this.transition = transition;
+        }
+
+        public int getChangeCount() {
+            return changeCount;
+        }
+
+        public int getCompletedChangeCount() {
+            return completedChangeCount;
+        }
+
+        /**
+         * Get the error that triggered this callback, if any.  There also might
+         * be a non-null error saved by the replicator from something that previously
+         * happened, which you can get by calling getSource().getLastError().
+         */
+        public Throwable getError() {
+            return error;
+        }
+
+        /* package */ void setError(Throwable error) {
+            this.error = error;
         }
     }
 
