@@ -1,6 +1,8 @@
 package com.couchbase.lite.replicator2;
 
 import com.couchbase.lite.Database;
+import com.couchbase.lite.RevisionList;
+import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.replicator.ChangeTracker;
 import com.couchbase.lite.replicator.ChangeTrackerClient;
 import com.couchbase.lite.support.HttpClientFactory;
@@ -39,6 +41,13 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
 
+    public boolean isPull() {
+        return true;
+    }
+
+    /* package */ void maybeCreateRemoteDB() {
+        // puller never needs to do this
+    }
 
     private void startChangeTracker() {
 
@@ -68,6 +77,16 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         changeTracker.setUsePOST(serverIsSyncGatewayVersion("0.93"));
         changeTracker.start();
 
+    }
+
+    /**
+     * Process a bunch of remote revisions from the _changes feed at once
+     */
+    @Override
+    @InterfaceAudience.Private
+    protected void processInbox(RevisionList inbox) {
+        // TODO: move code from Puller.processInbox()
+        Log.d(Log.TAG_SYNC, "processInbox called");
     }
 
     @Override

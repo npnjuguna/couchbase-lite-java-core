@@ -89,23 +89,28 @@ public class RemoteRequest implements Runnable {
     @Override
     public void run() {
 
-        Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() called, url: %s", this, url);
+        try {
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() called, url: %s", this, url);
 
-        HttpClient httpClient = clientFactory.getHttpClient();
+            HttpClient httpClient = clientFactory.getHttpClient();
 
-        ClientConnectionManager manager = httpClient.getConnectionManager();
+            ClientConnectionManager manager = httpClient.getConnectionManager();
 
-        preemptivelySetAuthCredentials(httpClient);
+            preemptivelySetAuthCredentials(httpClient);
 
-        request.addHeader("Accept", "multipart/related, application/json");
+            request.addHeader("Accept", "multipart/related, application/json");
 
-        addRequestHeaders(request);
+            addRequestHeaders(request);
 
-        setBody(request);
+            setBody(request);
 
-        executeRequest(httpClient, request);
+            executeRequest(httpClient, request);
 
-        Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() finished, url: %s", this, url);
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() finished, url: %s", this, url);
+
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "RemoteRequest.run() exception: %s", e);
+        }
 
 
     }
@@ -123,8 +128,10 @@ public class RemoteRequest implements Runnable {
     }
 
     protected void addRequestHeaders(HttpUriRequest request) {
-        for (String requestHeaderKey : requestHeaders.keySet()) {
-            request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
+        if (requestHeaders != null) {
+            for (String requestHeaderKey : requestHeaders.keySet()) {
+                request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
+            }
         }
     }
 

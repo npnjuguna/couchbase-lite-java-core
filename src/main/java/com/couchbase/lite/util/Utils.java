@@ -2,6 +2,7 @@ package com.couchbase.lite.util;
 
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
+import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
@@ -98,4 +99,11 @@ public class Utils {
         }
     }
 
+    @InterfaceAudience.Private
+    public static boolean is404(Throwable e) {
+        if (e instanceof HttpResponseException) {
+            return ((HttpResponseException) e).getStatusCode() == 404;
+        }
+        return false;
+    }
 }
