@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -20,6 +22,7 @@ public class Batcher<T> {
 
     private ScheduledExecutorService workExecutor;
     private ScheduledFuture<?> flushFuture;
+    private List<ScheduledFuture<?>> pendingFutures;
     private int capacity;
     private int delay;
     private int scheduledDelay;
@@ -33,7 +36,9 @@ public class Batcher<T> {
         @Override
         public void run() {
             try {
+                Log.d(Log.TAG_SYNC, "processNowRunnable.run() method starting");
                 processNow();
+                Log.d(Log.TAG_SYNC, "processNowRunnable.run() method finished");
             } catch (Exception e) {
                 // we don't want this to crash the batcher
                 com.couchbase.lite.util.Log.e(Log.TAG_SYNC, this + ": BatchProcessor throw exception", e);
@@ -55,19 +60,18 @@ public class Batcher<T> {
         this.capacity = capacity;
         this.delay = delay;
         this.processor = processor;
+        this.pendingFutures = new ArrayList<ScheduledFuture<?>>();
+        this.inbox = new LinkedHashSet<T>();
     }
 
     /**
      * Adds multiple objects to the queue.
      */
-    public synchronized void queueObjects(List<T> objects) {
+    public void queueObjects(List<T> objects) {
 
         Log.v(Log.TAG_SYNC, "%s: queueObjects called with %d objects. ", this, objects.size());
         if (objects.size() == 0) {
             return;
-        }
-        if (inbox == null) {
-            inbox = new LinkedHashSet<T>();
         }
 
         Log.v(Log.TAG_SYNC, "%s: inbox size before adding objects: %d", this, inbox.size());
@@ -75,6 +79,32 @@ public class Batcher<T> {
         inbox.addAll(objects);
 
         scheduleWithDelay(delayToUse());
+    }
+
+    public void waitForPendingFutures() {
+
+        List<ScheduledFuture<?>> finishedFutures = new ArrayList<ScheduledFuture<?>>();
+
+        for (ScheduledFuture future : pendingFutures) {
+            try {
+                Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
+                future.get();
+
+                Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
+                finishedFutures.add(future);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } catch (ExecutionException e) {
+                e.printStackTrace();
+            }
+
+        }
+
+        /*// remove the ones that we waited for
+        for (ScheduledFuture future : pendingFutures) {
+            pendingFutures.remove(future);
+        }*/
+
     }
 
     /**
@@ -129,61 +159,27 @@ public class Batcher<T> {
         scheduled = false;
         List<T> toProcess = new ArrayList<T>();
 
-        synchronized (this) {
-            if (inbox == null || inbox.size() == 0) {
-                Log.v(Log.TAG_SYNC, this + ": processNow() called, but inbox is empty");
-                return;
-            } else if (inbox.size() <= capacity) {
-                Log.v(Log.TAG_SYNC, "%s: inbox.size() <= capacity, adding %d items from inbox -> toProcess", this, inbox.size());
-                toProcess.addAll(inbox);
-                inbox = null;
-            } else {
-                Log.v(Log.TAG_SYNC, "%s: processNow() called, inbox size: %d", this, inbox.size());
-                int i = 0;
-                for (T item: inbox) {
-                    toProcess.add(item);
-                    i += 1;
-                    if (i >= capacity) {
-                        break;
-                    }
-                }
-
-                for (T item : toProcess) {
-                    Log.v(Log.TAG_SYNC, "%s: processNow() removing %s from inbox", this, item);
-                    inbox.remove(item);
-                }
-
-                Log.v(Log.TAG_SYNC, "%s: inbox.size() > capacity, moving %d items from inbox -> toProcess array", this, toProcess.size());
-
-                // There are more objects left, so schedule them Real Soon:
-                scheduleWithDelay(delayToUse());
-
-            }
-
-        }
-        if(toProcess != null && toProcess.size() > 0) {
-            Log.v(Log.TAG_SYNC, "%s: invoking processor with %d items ", this, toProcess.size());
-            processor.process(toProcess);
+        if (inbox == null || inbox.size() == 0) {
+            Log.v(Log.TAG_SYNC, this + ": processNow() called, but inbox is empty");
+            return;
         } else {
-            Log.v(Log.TAG_SYNC, "%s: nothing to process", this);
+            toProcess.addAll(inbox);
+            inbox.clear();
+            Log.v(Log.TAG_SYNC, this + ": processNow() called, toProcess(): %s", toProcess);
+            processor.process(toProcess);
+            Log.v(Log.TAG_SYNC, this + ": processNow() finished, toProcess(): %s", toProcess);
+            lastProcessedTime = System.currentTimeMillis();
         }
-        lastProcessedTime = System.currentTimeMillis();
 
     }
 
     private void scheduleWithDelay(int suggestedDelay) {
         Log.v(Log.TAG_SYNC, "%s: scheduleWithDelay called with delay: %d ms", this, suggestedDelay);
-        if (scheduled && (suggestedDelay < scheduledDelay)) {
-            Log.v(Log.TAG_SYNC, "%s: already scheduled and: %d < %d --> unscheduling", this, suggestedDelay, scheduledDelay);
-            unschedule();
-        }
-        if (!scheduled) {
-            Log.v(Log.TAG_SYNC, "not already scheduled");
-            scheduled = true;
-            scheduledDelay = suggestedDelay;
-            Log.v(Log.TAG_SYNC, "workExecutor.schedule() with delay: %d ms", suggestedDelay);
-            flushFuture = workExecutor.schedule(processNowRunnable, suggestedDelay, TimeUnit.MILLISECONDS);
-        }
+        scheduledDelay = suggestedDelay;
+        Log.v(Log.TAG_SYNC, "workExecutor.schedule() with delay: %d ms", suggestedDelay);
+        ScheduledFuture future = workExecutor.schedule(processNowRunnable, suggestedDelay, TimeUnit.MILLISECONDS);
+        pendingFutures.add(future);
+        flushFuture = future;
     }
 
     private void unschedule() {

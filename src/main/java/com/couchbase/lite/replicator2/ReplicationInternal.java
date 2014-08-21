@@ -791,16 +791,28 @@ abstract class ReplicationInternal {
 
         Log.d(Log.TAG_SYNC, "stopGraceful()");
 
-        // stop things and possibly wait for them to stop ..
+        // this has to be on a different thread than the replicator thread, or else it's a deadlock
+        // because it might be waiting for jobs that have been scheduled, and not
+        // yet executed (and which will never execute because this will block processing).
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
 
-        try {
-            Log.d(Log.TAG_SYNC, "sleeping ..");
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+                // stop things and possibly wait for them to stop ..
+                Log.d(Log.TAG_SYNC, "waitForPendingFutures()");
+                batcher.waitForPendingFutures();
 
-        stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
+                // all state machine triggers need to happen on the replicator thread
+                workExecutor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
+                    }
+                });
+            }
+        }).start();
+
+
 
     }
 

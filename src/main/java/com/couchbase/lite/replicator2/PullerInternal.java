@@ -615,7 +615,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 Log.v(Log.TAG_SYNC, "%s: inserted %d revs in %d milliseconds", this, downloads.size(), delta);
 
                 int newCompletedChangesCount = getCompletedChangesCount().get() + downloads.size();
-                Log.d(Log.TAG_SYNC, "%s insertDownloads() updating completedChangesCount from %d -> %d ", this, getCompletedChangesCount(), newCompletedChangesCount);
+                Log.d(Log.TAG_SYNC, "%s insertDownloads() updating completedChangesCount from %d -> %d ", this, getCompletedChangesCount().get(), newCompletedChangesCount);
 
                 addToCompletedChangesCount(downloads.size());
 
@@ -861,9 +861,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             addToChangesCount(1);
 
             addToInbox(rev);
+
         }
 
-        batcher.flushAll();
+
 
     }
 
@@ -932,5 +933,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 }
             }
         });
+    }
+
+    protected void stopGraceful() {
+        super.stopGraceful();
+        Log.d(Log.TAG_SYNC, "PullerInternal stopGraceful()");
     }
 }
