@@ -97,13 +97,11 @@ public class Batcher<T> {
      * After this method returns, the queue is guaranteed to be empty.
      */
     public void flushAll() {
-        while (inbox.size() > 0) {
-            unschedule();
-            List<T> toProcess = new ArrayList<T>();
-            toProcess.addAll(inbox);
-            processor.process(toProcess);
-            lastProcessedTime = System.currentTimeMillis();
-        }
+        List<T> toProcess = new ArrayList<T>();
+        toProcess.addAll(inbox);
+        processor.process(toProcess);
+        lastProcessedTime = System.currentTimeMillis();
+        inbox.clear();
     }
 
     /**

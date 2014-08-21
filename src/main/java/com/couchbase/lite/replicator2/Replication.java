@@ -4,6 +4,7 @@ import com.couchbase.lite.Database;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.util.Log;
 import com.github.oxo42.stateless4j.transitions.Transition;
 
 import java.net.URL;
@@ -151,7 +152,11 @@ public class Replication implements ReplicationInternal.ChangeListener {
     @Override
     public void changed(ChangeEvent event) {
         for (ChangeListener changeListener : changeListeners) {
-            changeListener.changed(event);
+            try {
+                changeListener.changed(event);
+            } catch (Exception e) {
+                Log.e(Log.TAG_SYNC, "Exception calling changeListener.changed: %s", e);
+            }
         }
     }
 

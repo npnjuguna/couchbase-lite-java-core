@@ -2,6 +2,7 @@ package com.couchbase.lite.util;
 
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
+import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
@@ -106,4 +107,14 @@ public class Utils {
         }
         return false;
     }
+
+    @InterfaceAudience.Private
+    public static int getStatusFromError(Throwable t) {
+        if (t instanceof CouchbaseLiteException) {
+            CouchbaseLiteException couchbaseLiteException = (CouchbaseLiteException) t;
+            return couchbaseLiteException.getCBLStatus().getCode();
+        }
+        return Status.UNKNOWN;
+    }
+
 }

@@ -3,6 +3,7 @@ package com.couchbase.lite.replicator2;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Misc;
 import com.couchbase.lite.RevisionList;
+import com.couchbase.lite.Status;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.internal.InterfaceAudience;
@@ -10,6 +11,7 @@ import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.support.BatchProcessor;
 import com.couchbase.lite.support.Batcher;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.support.RemoteMultipartDownloaderRequest;
 import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.Log;
@@ -27,6 +29,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -35,6 +38,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Internal Replication object that does the heavy lifting
@@ -65,7 +69,9 @@ abstract class ReplicationInternal {
     protected boolean lastSequenceChanged;
     private String remoteCheckpointDocID;
     protected Map<String, Object> remoteCheckpoint;
-
+    protected AtomicInteger completedChangesCount;
+    protected AtomicInteger changesCount;
+    private int revisionsFailed;
 
     // the code assumes this is a _single threaded_ work executor.
     // if it's not, the behavior will be buggy.  I don't see a way to assert this in the code.
@@ -170,8 +176,8 @@ abstract class ReplicationInternal {
 
     protected void initBatcher() {
 
-        /*
-         // TODO: add this back in  ..
+
+
         batcher = new Batcher<RevisionInternal>(workExecutor, INBOX_CAPACITY, PROCESSOR_DELAY, new BatchProcessor<RevisionInternal>() {
             @Override
             public void process(List<RevisionInternal> inbox) {
@@ -188,7 +194,7 @@ abstract class ReplicationInternal {
                 }
             }
         });
-        */
+
 
     }
 
@@ -330,7 +336,7 @@ abstract class ReplicationInternal {
         Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s: asyncTaskStarted %d -> %d", this, this.asyncTaskCount, this.asyncTaskCount + 1);
         if (asyncTaskCount++ == 0) {
             Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s: asyncTaskStarted() calling updateActive()", this);
-            // TODO: re-add this: updateActive();
+            updateActive();
         }
     }
 
@@ -344,8 +350,39 @@ abstract class ReplicationInternal {
         assert(asyncTaskCount >= 0);
         if (asyncTaskCount == 0) {
             Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s: asyncTaskFinished() calling updateActive()", this);
-            // TODO: re-add this: updateActive();
+            updateActive();
         }
+    }
+
+    @InterfaceAudience.Private
+    /* package */ void addToCompletedChangesCount(int delta) {
+        int previousVal = getCompletedChangesCount().getAndAdd(delta);
+        Log.v(Log.TAG_SYNC, "%s: Incrementing completedChangesCount count from %s by adding %d -> %d", this, previousVal, delta, completedChangesCount.get());
+        notifyChangeListeners();
+    }
+
+    @InterfaceAudience.Private
+    /* package */ void addToChangesCount(int delta) {
+        int previousVal = getChangesCount().getAndAdd(delta);
+        if (getChangesCount().get() < 0) {
+            Log.w(Log.TAG_SYNC, "Changes count is negative, this could indicate an error");
+        }
+        Log.v(Log.TAG_SYNC, "%s: Incrementing changesCount count from %s by adding %d -> %d", this, previousVal, delta, changesCount.get());
+        notifyChangeListeners();
+    }
+
+    public AtomicInteger getCompletedChangesCount() {
+        if (completedChangesCount == null) {
+            completedChangesCount = new AtomicInteger(0);
+        }
+        return completedChangesCount;
+    }
+
+    public AtomicInteger getChangesCount() {
+        if (changesCount == null) {
+            changesCount = new AtomicInteger(0);
+        }
+        return changesCount;
     }
 
     /**
@@ -398,6 +435,35 @@ abstract class ReplicationInternal {
     }
 
     /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public void sendAsyncMultipartDownloaderRequest(String method, String relativePath, Object body, Database db, RemoteRequestCompletionBlock onCompletion) {
+        try {
+
+            String urlStr = buildRelativeURLString(relativePath);
+            URL url = new URL(urlStr);
+
+            RemoteMultipartDownloaderRequest request = new RemoteMultipartDownloaderRequest(
+                    workExecutor,
+                    clientFactory,
+                    method,
+                    url,
+                    body,
+                    db,
+                    getHeaders(),
+                    onCompletion);
+
+            request.setAuthenticator(getAuthenticator());
+
+            remoteRequestExecutor.execute(request);
+        } catch (MalformedURLException e) {
+            Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
+        }
+    }
+
+
+    /**
      * Get the local database which is the source or target of this replication
      */
     @InterfaceAudience.Public
@@ -414,7 +480,127 @@ abstract class ReplicationInternal {
         return requestHeaders;
     }
 
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public void saveLastSequence() {
+        if (!lastSequenceChanged) {
+            return;
+        }
 
+        /* TODO: use state machine for this
+        if (savingCheckpoint) {
+            // If a save is already in progress, don't do anything. (The completion block will trigger
+            // another save after the first one finishes.)
+            overdueForSave = true;
+            return;
+        } */
+
+        lastSequenceChanged = false;
+
+        Log.d(Log.TAG_SYNC, "%s: saveLastSequence() called. lastSequence: %s", this, lastSequence);
+        final Map<String, Object> body = new HashMap<String, Object>();
+        if (remoteCheckpoint != null) {
+            body.putAll(remoteCheckpoint);
+        }
+        body.put("lastSequence", lastSequence);
+
+        String remoteCheckpointDocID = remoteCheckpointDocID();
+        if (remoteCheckpointDocID == null) {
+            Log.w(Log.TAG_SYNC, "%s: remoteCheckpointDocID is null, aborting saveLastSequence()", this);
+            return;
+        }
+
+        final String checkpointID = remoteCheckpointDocID;
+        Log.d(Log.TAG_SYNC, "%s: start put remote _local document.  checkpointID: %s body: %s", this, checkpointID, body);
+        sendAsyncRequest("PUT", "/_local/" + checkpointID, body, new RemoteRequestCompletionBlock() {
+
+            @Override
+            public void onCompletion(Object result, Throwable e) {
+                Log.d(Log.TAG_SYNC, "%s: put remote _local document request finished.  checkpointID: %s body: %s", this, checkpointID, body);
+                if (e != null) {
+                    Log.w(Log.TAG_SYNC, "%s: Unable to save remote checkpoint", e, this);
+                }
+                if (db == null) {
+                    Log.w(Log.TAG_SYNC, "%s: Database is null, ignoring remote checkpoint response", this);
+                    return;
+                }
+                if (!db.isOpen()) {
+                    Log.w(Log.TAG_SYNC, "%s: Database is closed, ignoring remote checkpoint response", this);
+                    return;
+                }
+                if (e != null) {
+                    // Failed to save checkpoint:
+                    switch (Utils.getStatusFromError(e)) {
+                        case Status.NOT_FOUND:
+                            Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: 404 NOT FOUND", this);
+                            remoteCheckpoint = null;  // doc deleted or db reset
+                            break;
+                        case Status.CONFLICT:
+                            Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: 409 CONFLICT", this);
+                            refreshRemoteCheckpointDoc();
+                            break;
+                        default:
+                            Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: %s", this, e);
+                            // TODO: On 401 or 403, and this is a pull, remember that remote
+                            // TODo: is read-only & don't attempt to read its checkpoint next time.
+                            break;
+                    }
+                } else {
+                    // Saved checkpoint:
+                    Log.i(Log.TAG_SYNC, "%s: saved remote checkpoint, updating local checkpoint", this);
+                    Map<String, Object> response = (Map<String, Object>) result;
+                    body.put("_rev", response.get("rev"));
+                    remoteCheckpoint = body;
+                    db.setLastSequence(lastSequence, checkpointID, !isPull());
+                }
+
+                /* TODO: use state machine for this
+                if (overdueForSave) {
+                    Log.i(Log.TAG_SYNC, "%s: overdueForSave == true, calling saveLastSequence()", this);
+                    saveLastSequence();
+                } */
+
+            }
+        });
+    }
+
+    /**
+     * Variant of -fetchRemoveCheckpointDoc that's used while replication is running, to reload the
+     * checkpoint to get its current revision number, if there was an error saving it.
+     */
+    @InterfaceAudience.Private
+    private void refreshRemoteCheckpointDoc() {
+        Log.d(Log.TAG_SYNC, "%s: Refreshing remote checkpoint to get its _rev...", this);
+        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: refreshRemoteCheckpointDoc() calling asyncTaskStarted()", this, Thread.currentThread());
+        asyncTaskStarted();
+        sendAsyncRequest("GET", "/_local/" + remoteCheckpointDocID(), null, new RemoteRequestCompletionBlock() {
+
+            @Override
+            public void onCompletion(Object result, Throwable e) {
+                try {
+                    if (db == null) {
+                        Log.w(Log.TAG_SYNC, "%s: db == null while refreshing remote checkpoint.  aborting", this);
+                        return;
+                    }
+                    if (e != null && Utils.getStatusFromError(e) != Status.NOT_FOUND) {
+                        Log.e(Log.TAG_SYNC, "%s: Error refreshing remote checkpoint", e, this);
+                    } else {
+                        Log.d(Log.TAG_SYNC, "%s: Refreshed remote checkpoint: %s", this, result);
+                        remoteCheckpoint = (Map<String, Object>) result;
+                        lastSequenceChanged = true;
+                        saveLastSequence();  // try saving again
+                    }
+                } finally {
+                    Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: refreshRemoteCheckpointDoc() calling asyncTaskFinished()", this, Thread.currentThread());
+
+                    asyncTaskFinished(1);
+                }
+            }
+        });
+
+    }
 
     @InterfaceAudience.Private
     /* package */ String buildRelativeURLString(String relativePath) {
@@ -682,6 +868,12 @@ abstract class ReplicationInternal {
                 ReplicationInternal.this.start();
             }
         });
+        stateMachine.configure(ReplicationState.RUNNING).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
+            @Override
+            public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                Log.d(Log.TAG_SYNC, "replicator no longer running");
+            }
+        });
         stateMachine.configure(ReplicationState.RUNNING).permit(
                 ReplicationTrigger.STOP_IMMEDIATE,
                 ReplicationState.STOPPED
@@ -748,6 +940,21 @@ abstract class ReplicationInternal {
         return false;
     }
 
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public void addToInbox(RevisionInternal rev) {
+        Log.v(Log.TAG_SYNC, "%s: addToInbox() called, rev: %s", this, rev);
+        batcher.queueObject(rev);
+        Log.v(Log.TAG_SYNC, "%s: addToInbox() calling updateActive()", this);
+        updateActive();
+    }
+
+    protected void updateActive() {
+        Log.v(Log.TAG_SYNC, "%s: updateActive() called", this);
+    }
+
     @InterfaceAudience.Private
     /* package */ void setServerType(String serverType) {
         this.serverType = serverType;
@@ -760,6 +967,13 @@ abstract class ReplicationInternal {
     public void setLifecycle(Replication.Lifecycle lifecycle) {
         this.lifecycle = lifecycle;
     }
+
+    @InterfaceAudience.Private
+    protected void revisionFailed() {
+        // Remember that some revisions failed to transfer, so we can later retry.
+        ++revisionsFailed;
+    }
+
 }
 
 
