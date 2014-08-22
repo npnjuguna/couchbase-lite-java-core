@@ -125,7 +125,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
      * Set whether this replication is continous
      */
     @InterfaceAudience.Public
-    public void setContinous(boolean isContinous) {
+    public void setContinuous(boolean isContinous) {
         if (isContinous) {
             this.lifecycle = Lifecycle.CONTINUOUS;
             replicationInternal.setLifecycle(Lifecycle.CONTINUOUS);
