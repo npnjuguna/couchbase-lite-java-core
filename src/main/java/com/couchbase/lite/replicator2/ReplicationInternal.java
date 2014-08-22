@@ -802,15 +802,8 @@ abstract class ReplicationInternal {
      * Actual work of stopping the replication process.
      */
     protected void stopGraceful() {
-
         Log.d(Log.TAG_SYNC, "stopGraceful()");
-
-
-
-
-
     }
-
 
     /**
      * Notify all change listeners of a ChangeEvent

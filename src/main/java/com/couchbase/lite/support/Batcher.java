@@ -6,6 +6,7 @@ import com.couchbase.lite.util.Log;
 import java.io.InterruptedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -83,20 +84,23 @@ public class Batcher<T> {
 
     public void waitForPendingFutures() {
 
-        List<ScheduledFuture<?>> finishedFutures = new ArrayList<ScheduledFuture<?>>();
+        try {
+            synchronized (this) {  // synchronized (this) == quick workaround for ConcurrentModificationException
+                for (ScheduledFuture future : pendingFutures) {
+                    try {
+                        Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
+                        future.get();
+                        Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    } catch (ExecutionException e) {
+                        e.printStackTrace();
+                    }
 
-        for (ScheduledFuture future : pendingFutures) {
-            try {
-                Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
-                future.get();
-                Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
-                finishedFutures.add(future);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (ExecutionException e) {
-                e.printStackTrace();
+                }
             }
-
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
         }
 
 

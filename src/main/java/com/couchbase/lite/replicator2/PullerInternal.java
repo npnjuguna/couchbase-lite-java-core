@@ -964,15 +964,18 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
                     downloadsToInsert.waitForPendingFutures();
 
-                    triggerStopImmediate();
-
-                    Log.e(Log.TAG_SYNC, "stopGraceful.run finished");
-
-
                 } catch (Exception e) {
                     Log.e(Log.TAG_SYNC, "stopGraceful.run() had exception: %s", e);
                     e.printStackTrace();
+
+                } finally {
+
+                    triggerStopImmediate();
                 }
+
+                Log.e(Log.TAG_SYNC, "stopGraceful.run finished");
+
+
 
             }
         }).start();
@@ -981,22 +984,25 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     public void waitForPendingFutures() {
 
-        List<Future> finishedFutures = new ArrayList<Future>();
+        try {
+            synchronized (this) {  // synchronized (this) == quick workaround for ConcurrentModificationException
+                for (Future future : pendingFutures) {
+                    try {
+                        Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
+                        future.get();
+                        Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    } catch (ExecutionException e) {
+                        e.printStackTrace();
+                    }
 
-        for (Future future : pendingFutures) {
-            try {
-                Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
-                future.get();
-                Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
-                finishedFutures.add(future);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (ExecutionException e) {
-                e.printStackTrace();
+                }
+
             }
-
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
         }
-
 
     }
 
