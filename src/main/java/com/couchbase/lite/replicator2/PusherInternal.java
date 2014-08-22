@@ -37,6 +37,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
@@ -52,6 +56,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     private boolean dontSendMultipart = false;
     SortedSet<Long> pendingSequences;
     Long maxPendingSequence;
+    private BlockingQueue<Future> pendingFutures;
 
     /**
      * Constructor
@@ -60,6 +65,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @InterfaceAudience.Private
     public PusherInternal(Database db, URL remote, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor, Replication.Lifecycle lifecycle, Replication parentReplication) {
         super(db, remote, clientFactory, workExecutor, lifecycle, parentReplication);
+        pendingFutures = new LinkedBlockingQueue<Future>();
     }
 
     @Override
@@ -80,9 +86,72 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
 
     protected void stopGraceful() {
+
         super.stopGraceful();
-        stopObserving();
+
         Log.d(Log.TAG_SYNC, "PusherInternal stopGraceful()");
+
+        // this has to be on a different thread than the replicator thread, or else it's a deadlock
+        // because it might be waiting for jobs that have been scheduled, and not
+        // yet executed (and which will never execute because this will block processing).
+        new Thread(new Runnable() {
+
+            @Override
+            public void run() {
+
+                try {
+
+                    Log.d(Log.TAG_SYNC, "PusherInternal stopGraceful()");
+
+                    // stop things and possibly wait for them to stop ..
+
+                    // wait for batcher's pending futures
+                    Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                    batcher.waitForPendingFutures();
+
+                    // wait for pending futures from the pusher (eg, oustanding http requests)
+                    waitForPendingFutures();
+
+                    stopObserving();
+
+
+                } catch (Exception e) {
+                    Log.e(Log.TAG_SYNC, "stopGraceful.run() had exception: %s", e);
+                    e.printStackTrace();
+
+                } finally {
+
+                    triggerStopImmediate();
+                }
+
+                Log.e(Log.TAG_SYNC, "stopGraceful.run finished");
+
+            }
+        }).start();
+
+
+    }
+
+    public void waitForPendingFutures() {
+
+        try {
+            while (!pendingFutures.isEmpty()) {
+                Future future = pendingFutures.take();
+                try {
+                    Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
+                    future.get();
+                    Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (ExecutionException e) {
+                    e.printStackTrace();
+                }
+            }
+
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
+        }
+
     }
 
     /**
@@ -138,7 +207,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: maybeCreateRemoteDB() calling asyncTaskStarted()", this, Thread.currentThread());
 
         asyncTaskStarted();
-        sendAsyncRequest("PUT", "", null, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("PUT", "", null, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object result, Throwable e) {
@@ -161,6 +230,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             }
 
         });
+        pendingFutures.add(future);
     }
 
     @Override
@@ -208,6 +278,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         if(isContinuous()) {
             observing = true;
             db.addChangeListener(this);
+        } else {
+            // if it's one shot, then we can stop graceful and wait for
+            // pending work to drain.
+
+            triggerStop();
         }
 
     }
@@ -266,7 +341,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: processInbox() calling asyncTaskStarted()", this, Thread.currentThread());
 
         asyncTaskStarted();
-        sendAsyncRequest("POST", "/_revs_diff", diffs, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("POST", "/_revs_diff", diffs, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object response, Throwable e) {
@@ -371,10 +446,12 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: processInbox.sendAsyncRequest() calling asyncTaskFinished()", this, Thread.currentThread());
 
                     asyncTaskFinished(1);
+
                 }
             }
 
         });
+        pendingFutures.add(future);
 
     }
 
@@ -400,7 +477,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: uploadBulkDocs() calling asyncTaskStarted()", this, Thread.currentThread());
 
         asyncTaskStarted();
-        sendAsyncRequest("POST", "/_bulk_docs", bulkDocsBody, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("POST", "/_bulk_docs", bulkDocsBody, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object result, Throwable e) {
@@ -451,6 +528,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
             }
         });
+        pendingFutures.add(future);
 
     }
 
@@ -531,7 +609,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: uploadMultipartRevision() calling asyncTaskStarted()", this, Thread.currentThread());
 
         asyncTaskStarted();
-        sendAsyncMultipartRequest("PUT", path, multiPart, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncMultipartRequest("PUT", path, multiPart, new RemoteRequestCompletionBlock() {
             @Override
             public void onCompletion(Object result, Throwable e) {
                 try {
@@ -562,6 +640,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
             }
         });
+        pendingFutures.add(future);
 
         return true;
 
@@ -581,7 +660,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
         asyncTaskStarted();
         String path = String.format("/%s?new_edits=false", URIUtils.encode(rev.getDocId()));
-        sendAsyncRequest("PUT",
+        Future future = sendAsyncRequest("PUT",
                 path,
                 rev.getProperties(),
                 new RemoteRequestCompletionBlock() {
@@ -598,6 +677,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         asyncTaskFinished(1);
                     }
                 });
+        pendingFutures.add(future);
     }
 
 

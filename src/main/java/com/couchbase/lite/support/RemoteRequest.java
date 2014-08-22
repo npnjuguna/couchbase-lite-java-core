@@ -310,6 +310,23 @@ public class RemoteRequest implements Runnable {
 
     public void respondWithResult(final Object result, final Throwable error, final HttpResponse response) {
 
+        try {
+            if (onPreCompletion != null) {
+                onPreCompletion.onCompletion(response, error);
+            }
+            onCompletion.onCompletion(result, error);
+            if (onPostCompletion != null) {
+                onPostCompletion.onCompletion(response, error);
+            }
+        } catch (Exception e) {
+            // don't let this crash the thread
+            Log.e(Log.TAG_REMOTE_REQUEST,
+                    "RemoteRequestCompletionBlock throw Exception",
+                    e);
+        }
+
+        // Old way: respond async
+        /*
         if (workExecutor != null) {
             workExecutor.submit(new Runnable() {
 
@@ -334,6 +351,7 @@ public class RemoteRequest implements Runnable {
         } else {
             Log.e(Log.TAG_REMOTE_REQUEST, "Work executor was null!");
         }
+        */
     }
 
 }

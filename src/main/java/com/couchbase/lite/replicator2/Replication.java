@@ -72,8 +72,15 @@ public class Replication implements ReplicationInternal.ChangeListener {
                 );
                 break;
             case PUSH:
-                throw new RuntimeException(String.format("TODO: %s", direction));
-                // break;
+                replicationInternal = new PusherInternal(
+                        this.db,
+                        this.remote,
+                        this.clientFactory,
+                        this.workExecutor,
+                        this.lifecycle,
+                        this
+                );
+                break;
             default:
                 throw new RuntimeException(String.format("Unknown direction: %s", direction));
         }

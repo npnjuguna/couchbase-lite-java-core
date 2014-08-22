@@ -70,7 +70,6 @@ abstract class ReplicationInternal {
     protected ExecutorService remoteRequestExecutor;
     protected int asyncTaskCount;
     protected Throwable error;
-    protected boolean lastSequenceChanged;
     private String remoteCheckpointDocID;
     protected Map<String, Object> remoteCheckpoint;
     protected AtomicInteger completedChangesCount;
@@ -458,7 +457,7 @@ abstract class ReplicationInternal {
      * @exclude
      */
     @InterfaceAudience.Private
-    public void sendAsyncMultipartRequest(String method, String relativePath, MultipartEntity multiPartEntity, RemoteRequestCompletionBlock onCompletion) {
+    public Future sendAsyncMultipartRequest(String method, String relativePath, MultipartEntity multiPartEntity, RemoteRequestCompletionBlock onCompletion) {
         URL url = null;
         try {
             String urlStr = buildRelativeURLString(relativePath);
@@ -478,7 +477,7 @@ abstract class ReplicationInternal {
 
         request.setAuthenticator(getAuthenticator());
 
-        remoteRequestExecutor.execute(request);
+        return remoteRequestExecutor.submit(request);
     }
 
     /**
@@ -536,9 +535,6 @@ abstract class ReplicationInternal {
      */
     @InterfaceAudience.Private
     public void saveLastSequence() {
-        if (!lastSequenceChanged) {
-            return;
-        }
 
         /* TODO: use state machine for this
         if (savingCheckpoint) {
@@ -547,8 +543,6 @@ abstract class ReplicationInternal {
             overdueForSave = true;
             return;
         } */
-
-        lastSequenceChanged = false;
 
         Log.d(Log.TAG_SYNC, "%s: saveLastSequence() called. lastSequence: %s", this, lastSequence);
         final Map<String, Object> body = new HashMap<String, Object>();
@@ -640,7 +634,6 @@ abstract class ReplicationInternal {
                     } else {
                         Log.d(Log.TAG_SYNC, "%s: Refreshed remote checkpoint: %s", this, result);
                         remoteCheckpoint = (Map<String, Object>) result;
-                        lastSequenceChanged = true;
                         saveLastSequence();  // try saving again
                     }
                 } finally {
@@ -673,7 +666,6 @@ abstract class ReplicationInternal {
      */
     @InterfaceAudience.Private
     public void fetchRemoteCheckpointDoc() {
-        lastSequenceChanged = false;
         String checkpointId = remoteCheckpointDocID();
         final String localLastSequence = db.lastSequenceWithCheckpointId(checkpointId);
 
@@ -933,6 +925,7 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                ReplicationInternal.this.clearDbRef();
                 notifyChangeListenersStateTransition(transition);
             }
         });
@@ -1019,16 +1012,7 @@ abstract class ReplicationInternal {
         if (lastSequenceIn != null && !lastSequenceIn.equals(lastSequence)) {
             Log.v(Log.TAG_SYNC, "%s: Setting lastSequence to %s from(%s)", this, lastSequenceIn, lastSequence );
             lastSequence = lastSequenceIn;
-            if (!lastSequenceChanged) {
-                lastSequenceChanged = true;
-                workExecutor.schedule(new Runnable() {
-
-                    @Override
-                    public void run() {
-                        saveLastSequence();
-                    }
-                }, 2 * 1000, TimeUnit.MILLISECONDS);
-            }
+            saveLastSequence();
         }
     }
 
@@ -1108,6 +1092,23 @@ abstract class ReplicationInternal {
         }
         return new Status(Status.OK);
 
+
+    }
+
+    private void clearDbRef() {
+
+        // TODO: there was some logic here that was NOT saving the checkpoint to
+        // TODO: the DB if: (savingCheckpoint && lastSequence != null && db != null)
+
+        Log.v(Log.TAG_SYNC, "%s: clearDbRef() called", this);
+
+        if (!db.isOpen()) {
+            Log.w(Log.TAG_SYNC, "Not attempting to setLastSequence, db is closed");
+        } else {
+            db.setLastSequence(lastSequence, remoteCheckpointDocID(), !isPull());
+        }
+        Log.v(Log.TAG_SYNC, "%s: clearDbRef() setting db to null", this);
+        db = null;
 
     }
 
