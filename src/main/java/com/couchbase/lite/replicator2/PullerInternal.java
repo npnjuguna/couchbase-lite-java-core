@@ -58,7 +58,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     protected List<RevisionInternal> bulkRevsToPull;
     protected List<RevisionInternal> deletedRevsToPull;
     protected int httpConnectionCount;
-    protected CollectionUtils.Functor<RevisionInternal,RevisionInternal> revisionBodyTransformationBlock;
     protected Batcher<RevisionInternal> downloadsToInsert;
     private BlockingQueue<Future> pendingFutures;
 
@@ -355,46 +354,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     }
 
-    @InterfaceAudience.Private
-    protected static Status statusFromBulkDocsResponseItem(Map<String, Object> item) {
 
-        try {
-            if (!item.containsKey("error")) {
-                return new Status(Status.OK);
-            }
-            String errorStr = (String) item.get("error");
-            if (errorStr == null || errorStr.isEmpty()) {
-                return new Status(Status.OK);
-            }
-
-            // 'status' property is nonstandard; Couchbase Lite returns it, others don't.
-            String statusString = (String) item.get("status");
-            int status = Integer.parseInt(statusString);
-            if (status >= 400) {
-                return new Status(status);
-            }
-            // If no 'status' present, interpret magic hardcoded CouchDB error strings:
-            if (errorStr.equalsIgnoreCase("unauthorized")) {
-                return new Status(Status.UNAUTHORIZED);
-            } else if (errorStr.equalsIgnoreCase("forbidden")) {
-                return new Status(Status.FORBIDDEN);
-            } else if (errorStr.equalsIgnoreCase("conflict")) {
-                return new Status(Status.CONFLICT);
-            } else if (errorStr.equalsIgnoreCase("missing")) {
-                return new Status(Status.NOT_FOUND);
-            } else if (errorStr.equalsIgnoreCase("not_found")) {
-                return new Status(Status.NOT_FOUND);
-            } else {
-                return new Status(Status.UPSTREAM_ERROR);
-            }
-
-        } catch (Exception e) {
-            Log.e(Database.TAG, "Exception getting status from " + item, e);
-        }
-        return new Status(Status.OK);
-
-
-    }
 
     // This invokes the tranformation block if one is installed and queues the resulting CBL_Revision
     private void queueDownloadedRevision(RevisionInternal rev) {
@@ -439,43 +399,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     }
 
-    protected RevisionInternal transformRevision(RevisionInternal rev) {
-        if(revisionBodyTransformationBlock != null) {
-            try {
-                final int generation = rev.getGeneration();
-                RevisionInternal xformed = revisionBodyTransformationBlock.invoke(rev);
-                if (xformed == null)
-                    return null;
-                if (xformed != rev) {
-                    assert(xformed.getDocId().equals(rev.getDocId()));
-                    assert(xformed.getRevId().equals(rev.getRevId()));
-                    assert(xformed.getProperties().get("_revisions").equals(rev.getProperties().get("_revisions")));
-                    if (xformed.getProperties().get("_attachments") != null) {
-                        // Insert 'revpos' properties into any attachments added by the callback:
-                        RevisionInternal mx = new RevisionInternal(xformed.getProperties(), db);
-                        xformed = mx;
-                        mx.mutateAttachments(new CollectionUtils.Functor<Map<String,Object>,Map<String,Object>>() {
-                            public Map<String, Object> invoke(Map<String, Object> info) {
-                                if (info.get("revpos") != null) {
-                                    return info;
-                                }
-                                if(info.get("data") == null) {
-                                    throw new IllegalStateException("Transformer added attachment without adding data");
-                                }
-                                Map<String,Object> nuInfo = new HashMap<String, Object>(info);
-                                nuInfo.put("revpos",generation);
-                                return nuInfo;
-                            }
-                        });
-                    }
-                    rev = xformed;
-                }
-            }catch (Exception e) {
-                Log.w(Log.TAG_SYNC,"%s: Exception transforming a revision of doc '%s", e, this, rev.getDocId());
-            }
-        }
-        return rev;
-    }
+
 
 
     // Get as many revisions as possible in one _all_docs request.
@@ -770,26 +694,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
 
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    public void setLastSequence(String lastSequenceIn) {
-        if (lastSequenceIn != null && !lastSequenceIn.equals(lastSequence)) {
-            Log.v(Log.TAG_SYNC, "%s: Setting lastSequence to %s from(%s)", this, lastSequenceIn, lastSequence );
-            lastSequence = lastSequenceIn;
-            if (!lastSequenceChanged) {
-                lastSequenceChanged = true;
-                workExecutor.schedule(new Runnable() {
 
-                    @Override
-                    public void run() {
-                        saveLastSequence();
-                    }
-                }, 2 * 1000, TimeUnit.MILLISECONDS);
-            }
-        }
-    }
 
     private void initPendingSequences() {
 
@@ -1006,5 +911,15 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
 
     }
+
+    @Override
+    public boolean shouldCreateTarget() {
+        return false;
+    };
+
+    @Override
+    public void setCreateTarget(boolean createTarget) {
+        // silently ignore this -- doesn't make sense for pull replicator
+    };
 
 }

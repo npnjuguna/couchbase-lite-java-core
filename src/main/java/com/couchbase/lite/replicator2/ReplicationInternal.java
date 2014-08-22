@@ -12,8 +12,10 @@ import com.couchbase.lite.support.BatchProcessor;
 import com.couchbase.lite.support.Batcher;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteMultipartDownloaderRequest;
+import com.couchbase.lite.support.RemoteMultipartRequest;
 import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
+import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
 import com.github.oxo42.stateless4j.StateMachine;
@@ -23,6 +25,7 @@ import com.github.oxo42.stateless4j.transitions.Transition;
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
+import org.apache.http.entity.mime.MultipartEntity;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -38,6 +41,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -72,6 +76,8 @@ abstract class ReplicationInternal {
     protected AtomicInteger completedChangesCount;
     protected AtomicInteger changesCount;
     private int revisionsFailed;
+    protected CollectionUtils.Functor<RevisionInternal,RevisionInternal> revisionBodyTransformationBlock;
+
 
     // the code assumes this is a _single threaded_ work executor.
     // if it's not, the behavior will be buggy.  I don't see a way to assert this in the code.
@@ -211,6 +217,10 @@ abstract class ReplicationInternal {
 
 
     }
+
+    public abstract boolean shouldCreateTarget();
+
+    public abstract void setCreateTarget(boolean createTarget);
 
     protected void goOnline() {
 
@@ -442,6 +452,33 @@ abstract class ReplicationInternal {
         Future future = remoteRequestExecutor.submit(request);
         return future;
 
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public void sendAsyncMultipartRequest(String method, String relativePath, MultipartEntity multiPartEntity, RemoteRequestCompletionBlock onCompletion) {
+        URL url = null;
+        try {
+            String urlStr = buildRelativeURLString(relativePath);
+            url = new URL(urlStr);
+        } catch (MalformedURLException e) {
+            throw new IllegalArgumentException(e);
+        }
+        RemoteMultipartRequest request = new RemoteMultipartRequest(
+                workExecutor,
+                clientFactory,
+                method,
+                url,
+                multiPartEntity,
+                getLocalDatabase(),
+                getHeaders(),
+                onCompletion);
+
+        request.setAuthenticator(getAuthenticator());
+
+        remoteRequestExecutor.execute(request);
     }
 
     /**
@@ -972,6 +1009,106 @@ abstract class ReplicationInternal {
     protected void revisionFailed() {
         // Remember that some revisions failed to transfer, so we can later retry.
         ++revisionsFailed;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public void setLastSequence(String lastSequenceIn) {
+        if (lastSequenceIn != null && !lastSequenceIn.equals(lastSequence)) {
+            Log.v(Log.TAG_SYNC, "%s: Setting lastSequence to %s from(%s)", this, lastSequenceIn, lastSequence );
+            lastSequence = lastSequenceIn;
+            if (!lastSequenceChanged) {
+                lastSequenceChanged = true;
+                workExecutor.schedule(new Runnable() {
+
+                    @Override
+                    public void run() {
+                        saveLastSequence();
+                    }
+                }, 2 * 1000, TimeUnit.MILLISECONDS);
+            }
+        }
+    }
+
+    protected RevisionInternal transformRevision(RevisionInternal rev) {
+        if(revisionBodyTransformationBlock != null) {
+            try {
+                final int generation = rev.getGeneration();
+                RevisionInternal xformed = revisionBodyTransformationBlock.invoke(rev);
+                if (xformed == null)
+                    return null;
+                if (xformed != rev) {
+                    assert(xformed.getDocId().equals(rev.getDocId()));
+                    assert(xformed.getRevId().equals(rev.getRevId()));
+                    assert(xformed.getProperties().get("_revisions").equals(rev.getProperties().get("_revisions")));
+                    if (xformed.getProperties().get("_attachments") != null) {
+                        // Insert 'revpos' properties into any attachments added by the callback:
+                        RevisionInternal mx = new RevisionInternal(xformed.getProperties(), db);
+                        xformed = mx;
+                        mx.mutateAttachments(new CollectionUtils.Functor<Map<String,Object>,Map<String,Object>>() {
+                            public Map<String, Object> invoke(Map<String, Object> info) {
+                                if (info.get("revpos") != null) {
+                                    return info;
+                                }
+                                if(info.get("data") == null) {
+                                    throw new IllegalStateException("Transformer added attachment without adding data");
+                                }
+                                Map<String,Object> nuInfo = new HashMap<String, Object>(info);
+                                nuInfo.put("revpos",generation);
+                                return nuInfo;
+                            }
+                        });
+                    }
+                    rev = xformed;
+                }
+            }catch (Exception e) {
+                Log.w(Log.TAG_SYNC,"%s: Exception transforming a revision of doc '%s", e, this, rev.getDocId());
+            }
+        }
+        return rev;
+    }
+
+    @InterfaceAudience.Private
+    protected static Status statusFromBulkDocsResponseItem(Map<String, Object> item) {
+
+        try {
+            if (!item.containsKey("error")) {
+                return new Status(Status.OK);
+            }
+            String errorStr = (String) item.get("error");
+            if (errorStr == null || errorStr.isEmpty()) {
+                return new Status(Status.OK);
+            }
+
+            // 'status' property is nonstandard; Couchbase Lite returns it, others don't.
+            String statusString = (String) item.get("status");
+            int status = Integer.parseInt(statusString);
+            if (status >= 400) {
+                return new Status(status);
+            }
+            // If no 'status' present, interpret magic hardcoded CouchDB error strings:
+            if (errorStr.equalsIgnoreCase("unauthorized")) {
+                return new Status(Status.UNAUTHORIZED);
+            } else if (errorStr.equalsIgnoreCase("forbidden")) {
+                return new Status(Status.FORBIDDEN);
+            } else if (errorStr.equalsIgnoreCase("conflict")) {
+                return new Status(Status.CONFLICT);
+            } else if (errorStr.equalsIgnoreCase("missing")) {
+                return new Status(Status.NOT_FOUND);
+            } else if (errorStr.equalsIgnoreCase("not_found")) {
+                return new Status(Status.NOT_FOUND);
+            } else {
+                return new Status(Status.UPSTREAM_ERROR);
+            }
+
+        } catch (Exception e) {
+            Log.e(Database.TAG, "Exception getting status from " + item, e);
+        }
+        return new Status(Status.OK);
+
+
     }
 
 }

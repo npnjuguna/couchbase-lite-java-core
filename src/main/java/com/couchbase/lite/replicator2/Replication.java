@@ -138,6 +138,22 @@ public class Replication implements ReplicationInternal.ChangeListener {
     }
 
     /**
+     * Should the target database be created if it doesn't already exist? (Defaults to NO).
+     */
+    @InterfaceAudience.Public
+    public boolean shouldCreateTarget() {
+        return replicationInternal.shouldCreateTarget();
+    }
+
+    /**
+     * Set whether the target database be created if it doesn't already exist?
+     */
+    @InterfaceAudience.Public
+    public void setCreateTarget(boolean createTarget) {
+        replicationInternal.setCreateTarget(createTarget);
+    };
+
+    /**
      * Adds a change delegate that will be called whenever the Replication changes.
      */
     @InterfaceAudience.Public
