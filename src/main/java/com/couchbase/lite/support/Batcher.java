@@ -9,8 +9,10 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -22,8 +24,9 @@ import java.util.concurrent.TimeUnit;
 public class Batcher<T> {
 
     private ScheduledExecutorService workExecutor;
-    private ScheduledFuture<?> flushFuture;
-    private List<ScheduledFuture<?>> pendingFutures;
+    private ScheduledFuture flushFuture;
+    private BlockingQueue<ScheduledFuture> pendingFutures;
+
     private int capacity;
     private int delay;
     private int scheduledDelay;
@@ -61,7 +64,7 @@ public class Batcher<T> {
         this.capacity = capacity;
         this.delay = delay;
         this.processor = processor;
-        this.pendingFutures = new ArrayList<ScheduledFuture<?>>();
+        this.pendingFutures = new LinkedBlockingQueue<ScheduledFuture>();
         this.inbox = new LinkedHashSet<T>();
     }
 
@@ -85,24 +88,22 @@ public class Batcher<T> {
     public void waitForPendingFutures() {
 
         try {
-            synchronized (this) {  // synchronized (this) == quick workaround for ConcurrentModificationException
-                for (ScheduledFuture future : pendingFutures) {
-                    try {
-                        Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
-                        future.get();
-                        Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    } catch (ExecutionException e) {
-                        e.printStackTrace();
-                    }
-
+            while (!pendingFutures.isEmpty()) {
+                ScheduledFuture future = pendingFutures.take();
+                try {
+                    Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
+                    future.get();
+                    Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (ExecutionException e) {
+                    e.printStackTrace();
                 }
             }
+
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
         }
-
 
     }
 

@@ -33,8 +33,10 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -58,12 +60,13 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     protected int httpConnectionCount;
     protected CollectionUtils.Functor<RevisionInternal,RevisionInternal> revisionBodyTransformationBlock;
     protected Batcher<RevisionInternal> downloadsToInsert;
-    protected List<Future> pendingFutures;
+    private BlockingQueue<Future> pendingFutures;
+
 
 
     public PullerInternal(Database db, URL remote, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor, Replication.Lifecycle lifecycle, Replication parentReplication) {
         super(db, remote, clientFactory, workExecutor, lifecycle, parentReplication);
-        pendingFutures = new ArrayList<Future>();
+        pendingFutures = new LinkedBlockingQueue<Future>();
     }
 
     /**
@@ -985,21 +988,19 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     public void waitForPendingFutures() {
 
         try {
-            synchronized (this) {  // synchronized (this) == quick workaround for ConcurrentModificationException
-                for (Future future : pendingFutures) {
-                    try {
-                        Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
-                        future.get();
-                        Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    } catch (ExecutionException e) {
-                        e.printStackTrace();
-                    }
-
+            while (!pendingFutures.isEmpty()) {
+                Future future = pendingFutures.take();
+                try {
+                    Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
+                    future.get();
+                    Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (ExecutionException e) {
+                    e.printStackTrace();
                 }
-
             }
+
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
         }
