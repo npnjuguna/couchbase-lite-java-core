@@ -312,4 +312,14 @@ public class Replication implements ReplicationInternal.ChangeListener {
         }
     }
 
+    @InterfaceAudience.Private
+    /* package */ boolean serverIsSyncGatewayVersion(String minVersion) {
+        return replicationInternal.serverIsSyncGatewayVersion(minVersion);
+    }
+
+    @InterfaceAudience.Private
+    /* package */ void setServerType(String serverType) {
+        replicationInternal.setServerType(serverType);
+    }
+
 }
