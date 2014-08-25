@@ -118,7 +118,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     triggerStopImmediate();
                 }
 
-                Log.e(Log.TAG_SYNC, "stopGraceful.run finished");
+                Log.e(Log.TAG_SYNC, "PusherInternal stopGraceful.run() finished");
 
             }
         }).start();

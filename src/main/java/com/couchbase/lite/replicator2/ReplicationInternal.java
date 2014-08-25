@@ -132,6 +132,7 @@ abstract class ReplicationInternal {
             @Override
             public void run() {
                 try {
+                    Log.d(Log.TAG_SYNC, "firing trigger: %s", trigger);
                     stateMachine.fire(trigger);
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -942,6 +943,7 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                Log.d(Log.TAG_SYNC, "Entered state: %s", ReplicationState.STOPPED);
                 ReplicationInternal.this.clearDbRef();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1117,15 +1119,20 @@ abstract class ReplicationInternal {
         // TODO: there was some logic here that was NOT saving the checkpoint to
         // TODO: the DB if: (savingCheckpoint && lastSequence != null && db != null)
 
-        Log.v(Log.TAG_SYNC, "%s: clearDbRef() called", this);
+        try {
+            Log.v(Log.TAG_SYNC, "%s: clearDbRef() called", this);
 
-        if (!db.isOpen()) {
-            Log.w(Log.TAG_SYNC, "Not attempting to setLastSequence, db is closed");
-        } else {
-            db.setLastSequence(lastSequence, remoteCheckpointDocID(), !isPull());
+            if (!db.isOpen()) {
+                Log.w(Log.TAG_SYNC, "Not attempting to setLastSequence, db is closed");
+            } else {
+                db.setLastSequence(lastSequence, remoteCheckpointDocID(), !isPull());
+            }
+            Log.v(Log.TAG_SYNC, "%s: clearDbRef() setting db to null", this);
+            db = null;
+
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Exception in clearDbRef(): %s", e);
         }
-        Log.v(Log.TAG_SYNC, "%s: clearDbRef() setting db to null", this);
-        db = null;
 
     }
 

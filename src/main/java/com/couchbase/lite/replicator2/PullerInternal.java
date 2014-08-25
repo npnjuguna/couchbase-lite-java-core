@@ -899,7 +899,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     triggerStopImmediate();
                 }
 
-                Log.e(Log.TAG_SYNC, "stopGraceful.run finished");
+                Log.e(Log.TAG_SYNC, "PullerInternal stopGraceful.run() finished");
 
 
 

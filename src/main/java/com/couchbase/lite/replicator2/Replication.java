@@ -1,9 +1,11 @@
 package com.couchbase.lite.replicator2;
 
 import com.couchbase.lite.Database;
+import com.couchbase.lite.Manager;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.util.Log;
 import com.github.oxo42.stateless4j.transitions.Transition;
 
@@ -55,10 +57,11 @@ public class Replication implements ReplicationInternal.ChangeListener {
 
         this.db = db;
         this.remote = remote;
-        this.clientFactory = clientFactory;
         this.workExecutor = workExecutor;
         this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
         this.lifecycle = Lifecycle.ONESHOT;
+
+        setClientFactory(clientFactory);
 
         switch (direction) {
             case PULL:
@@ -282,5 +285,31 @@ public class Replication implements ReplicationInternal.ChangeListener {
         }
     }
 
+    /**
+     * Set the HTTP client factory if one was passed in, or use the default
+     * set in the manager if available.
+     * @param clientFactory
+     */
+    @InterfaceAudience.Private
+    protected void setClientFactory(HttpClientFactory clientFactory) {
+        Manager manager = null;
+        if (this.db != null) {
+            manager = this.db.getManager();
+        }
+        HttpClientFactory managerClientFactory = null;
+        if (manager != null) {
+            managerClientFactory = manager.getDefaultHttpClientFactory();
+        }
+        if (clientFactory != null) {
+            this.clientFactory = clientFactory;
+        } else {
+            if (managerClientFactory != null) {
+                this.clientFactory = managerClientFactory;
+            } else {
+                PersistentCookieStore cookieStore = db.getPersistentCookieStore();
+                this.clientFactory = new CouchbaseLiteHttpClientFactory(cookieStore);
+            }
+        }
+    }
 
 }
