@@ -810,8 +810,26 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 break;
             case CONTINUOUS:
                 String msg = String.format("Change tracker stopped during continuous replication");
+                Log.e(Log.TAG_SYNC, msg);
                 parentReplication.setLastError(new Exception(msg));
-                stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
+                stateMachine.fire(ReplicationTrigger.WAITING_FOR_CHANGES);
+
+                int delaySeconds = 10;  // TODO: make configurable
+                Log.d(Log.TAG_SYNC, "Scheduling change tracker restart in %d seconds", delaySeconds);
+                workExecutor.schedule(new Runnable() {
+                    @Override
+                    public void run() {
+                        // the replication may have been stopped by the time this scheduled fires
+                        // so we need to check the state here.
+                        if (stateMachine.isInState(ReplicationState.RUNNING)) {
+                            Log.d(Log.TAG_SYNC, "%s still running, restarting change tracker", this);
+                            startChangeTracker();
+                        } else {
+                            Log.d(Log.TAG_SYNC, "%s still no longer running, not restarting change tracker", this);
+                        }
+                    }
+                }, delaySeconds, TimeUnit.SECONDS);
+
                 break;
             default:
                 throw new RuntimeException(String.format("Unknown lifecycle: %s", lifecycle));
