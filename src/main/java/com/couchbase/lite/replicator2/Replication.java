@@ -40,7 +40,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
                 db,
                 remote,
                 direction,
-                new CouchbaseLiteHttpClientFactory(db.getPersistentCookieStore()),
+                db.getManager().getDefaultHttpClientFactory(),
                 Executors.newSingleThreadScheduledExecutor()
         );
 
