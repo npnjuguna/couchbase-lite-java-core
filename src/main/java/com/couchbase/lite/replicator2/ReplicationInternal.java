@@ -329,6 +329,7 @@ abstract class ReplicationInternal {
 
         if (throwable != error) {
             Log.e(Log.TAG_SYNC, "%s: Progress: set error = %s", this, throwable);
+            parentReplication.setLastError(throwable);
             error = throwable;
             Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
             changeEvent.setError(error);
