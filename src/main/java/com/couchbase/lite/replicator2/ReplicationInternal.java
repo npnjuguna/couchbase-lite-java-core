@@ -113,28 +113,26 @@ abstract class ReplicationInternal {
      * Trigger this replication to start (async)
      */
     public void triggerStart() {
-        workExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    stateMachine.fire(ReplicationTrigger.START);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    throw new RuntimeException(e);
-                }
-            }
-        });
+        fireTrigger(ReplicationTrigger.START);
     }
 
     /**
      * Trigger this replication to stop (async)
      */
     public void triggerStop() {
+        fireTrigger(ReplicationTrigger.STOP_GRACEFUL);
+    }
+
+    /**
+     * Fire a trigger to the state machine
+     */
+    protected void fireTrigger(final ReplicationTrigger trigger) {
+        // All state machine triggers need to happen on the replicator thread
         workExecutor.submit(new Runnable() {
             @Override
             public void run() {
                 try {
-                    stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
+                    stateMachine.fire(trigger);
                 } catch (Exception e) {
                     e.printStackTrace();
                     throw new RuntimeException(e);
@@ -148,13 +146,7 @@ abstract class ReplicationInternal {
      * been drained, or that caller chooses to ignore any pending work.
      */
     protected void triggerStopImmediate() {
-        // all state machine triggers need to happen on the replicator thread
-        workExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
-            }
-        });
+        fireTrigger(ReplicationTrigger.STOP_IMMEDIATE);
     }
 
     /**
@@ -167,7 +159,7 @@ abstract class ReplicationInternal {
             String msg = String.format("Db: %s is not open, abort replication", db);
             parentReplication.setLastError(new Exception(msg));
 
-            stateMachine.fire(ReplicationTrigger.STOP_IMMEDIATE);
+            fireTrigger(ReplicationTrigger.STOP_IMMEDIATE);
 
             return;
 
@@ -880,16 +872,41 @@ abstract class ReplicationInternal {
     protected void initializeStateMachine() {
 
         stateMachine = new StateMachine<ReplicationState, ReplicationTrigger>(ReplicationState.INITIAL);
+
+        // hierarchy
+        stateMachine.configure(ReplicationState.IDLE).substateOf(ReplicationState.RUNNING);
+
+        // permitted transitions
         stateMachine.configure(ReplicationState.INITIAL).permit(
                 ReplicationTrigger.START,
                 ReplicationState.RUNNING
         );
+        stateMachine.configure(ReplicationState.RUNNING).permit(
+                ReplicationTrigger.WAITING_FOR_CHANGES,
+                ReplicationState.IDLE
+        );
+        stateMachine.configure(ReplicationState.RUNNING).permit(
+                ReplicationTrigger.STOP_IMMEDIATE,
+                ReplicationState.STOPPED
+        );
+        stateMachine.configure(ReplicationState.RUNNING).permit(
+                ReplicationTrigger.STOP_GRACEFUL,
+                ReplicationState.STOPPING
+        );
+        stateMachine.configure(ReplicationState.STOPPING).permit(
+                ReplicationTrigger.STOP_IMMEDIATE,
+                ReplicationState.STOPPED
+        );
 
+        // ignored transitions
         stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.START);
         stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.STOP_GRACEFUL);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_GRACEFUL);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_IMMEDIATE);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
 
+        // actions
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
@@ -903,18 +920,18 @@ abstract class ReplicationInternal {
                 Log.d(Log.TAG_SYNC, "replicator no longer running");
             }
         });
-        stateMachine.configure(ReplicationState.RUNNING).permit(
-                ReplicationTrigger.STOP_IMMEDIATE,
-                ReplicationState.STOPPED
-        );
-        stateMachine.configure(ReplicationState.RUNNING).permit(
-                ReplicationTrigger.STOP_GRACEFUL,
-                ReplicationState.STOPPING
-        );
-        stateMachine.configure(ReplicationState.STOPPING).permit(
-                ReplicationTrigger.STOP_IMMEDIATE,
-                ReplicationState.STOPPED
-        );
+        stateMachine.configure(ReplicationState.IDLE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
+            @Override
+            public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                notifyChangeListenersStateTransition(transition);
+            }
+        });
+        stateMachine.configure(ReplicationState.IDLE).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
+            @Override
+            public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                notifyChangeListenersStateTransition(transition);
+            }
+        });
         stateMachine.configure(ReplicationState.STOPPING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {

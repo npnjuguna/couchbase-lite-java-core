@@ -6,6 +6,7 @@ package com.couchbase.lite.replicator2;
 public enum ReplicationState {
     INITIAL,
     RUNNING,
+    IDLE,
     STOPPING,
     STOPPED
 }

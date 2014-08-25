@@ -103,12 +103,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
                     Log.d(Log.TAG_SYNC, "PusherInternal stopGraceful()");
 
-                    // stop things and possibly wait for them to stop ..
-
-                    // wait for batcher's pending futures
-                    Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
-                    batcher.waitForPendingFutures();
-
                     // wait for pending futures from the pusher (eg, oustanding http requests)
                     waitForPendingFutures();
 
@@ -135,6 +129,13 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     public void waitForPendingFutures() {
 
         try {
+
+            // wait for batcher's pending futures
+            if (batcher != null) {
+                Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                batcher.waitForPendingFutures();
+            }
+
             while (!pendingFutures.isEmpty()) {
                 Future future = pendingFutures.take();
                 try {
@@ -278,6 +279,16 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         if(isContinuous()) {
             observing = true;
             db.addChangeListener(this);
+
+            // once this work drains, go into the IDLE state
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    waitForPendingFutures();
+                    fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+                }
+            }).start();
+
         } else {
             // if it's one shot, then we can stop graceful and wait for
             // pending work to drain.
