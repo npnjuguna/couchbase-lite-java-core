@@ -9,8 +9,14 @@ import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.util.Log;
 import com.github.oxo42.stateless4j.transitions.Transition;
 
+import org.apache.http.cookie.Cookie;
+import org.apache.http.impl.cookie.BasicClientCookie2;
+
 import java.net.URL;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -321,5 +327,75 @@ public class Replication implements ReplicationInternal.ChangeListener {
     /* package */ void setServerType(String serverType) {
         replicationInternal.setServerType(serverType);
     }
+
+    /**
+     * Set the filter to be used by this replication
+     */
+    @InterfaceAudience.Public
+    public void setFilter(String filterName) {
+        replicationInternal.setFilter(filterName);
+    }
+
+    /**
+     * Sets the documents to specify as part of the replication.
+     */
+    @InterfaceAudience.Public
+    public void setDocIds(List<String> docIds) {
+        replicationInternal.setDocIds(docIds);
+    }
+
+    /**
+     * Set parameters to pass to the filter function.
+     */
+    public void setFilterParams(Map<String, Object> filterParams) {
+        replicationInternal.setFilterParams(filterParams);
+    }
+
+    /**
+     * Sets an HTTP cookie for the Replication.
+     *
+     * @param name The name of the cookie.
+     * @param value The value of the cookie.
+     * @param path The path attribute of the cookie.  If null or empty, will use remote.getPath()
+     * @param maxAge The maxAge, in milliseconds, that this cookie should be valid for.
+     * @param secure Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
+     * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP, or HTTPS, requests thus restricting access from other, non-HTTP APIs.
+     */
+    @InterfaceAudience.Public
+    public void setCookie(String name, String value, String path, long maxAge, boolean secure, boolean httpOnly) {
+        replicationInternal.setCookie(name, value, path, maxAge, secure, httpOnly);
+    }
+
+    /**
+     * Sets an HTTP cookie for the Replication.
+     *
+     * @param name The name of the cookie.
+     * @param value The value of the cookie.
+     * @param path The path attribute of the cookie.  If null or empty, will use remote.getPath()
+     * @param expirationDate The expiration date of the cookie.
+     * @param secure Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
+     * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP, or HTTPS, requests thus restricting access from other, non-HTTP APIs.
+     */
+    @InterfaceAudience.Public
+    public void setCookie(String name, String value, String path, Date expirationDate, boolean secure, boolean httpOnly) {
+        replicationInternal.setCookie(name, value, path, expirationDate, secure, httpOnly);
+
+    }
+
+    /**
+     * Deletes an HTTP cookie for the Replication.
+     *
+     * @param name The name of the cookie.
+     */
+    @InterfaceAudience.Public
+    public void deleteCookie(String name) {
+        replicationInternal.deleteCookie(name);
+    }
+
+    @InterfaceAudience.Private
+    /* package */ HttpClientFactory getClientFactory() {
+        return replicationInternal.getClientFactory();
+    }
+
 
 }

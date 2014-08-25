@@ -25,13 +25,17 @@ import com.github.oxo42.stateless4j.transitions.Transition;
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
+import org.apache.http.cookie.Cookie;
 import org.apache.http.entity.mime.MultipartEntity;
+import org.apache.http.impl.cookie.BasicClientCookie2;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -704,7 +708,7 @@ abstract class ReplicationInternal {
         });
     }
 
-    @InterfaceAudience.Private
+    
     /* package */ abstract void maybeCreateRemoteDB();
 
     /**
@@ -714,7 +718,7 @@ abstract class ReplicationInternal {
      *
      * @exclude
      */
-    @InterfaceAudience.Private
+    
     public String remoteCheckpointDocID() {
 
         if (remoteCheckpointDocID != null) {
@@ -783,24 +787,37 @@ abstract class ReplicationInternal {
     }
 
     /**
+     * Set the filter to be used by this replication
+     */
+    
+    public void setFilter(String filterName) {
+        this.filterName = filterName;
+    }
+
+
+    /**
      * Is this a pull replication?  (Eg, it pulls data from Sync Gateway -> Device running CBL?)
      */
-    @InterfaceAudience.Public
     public abstract boolean isPull();
 
     /**
      * Gets the documents to specify as part of the replication.
      */
-    @InterfaceAudience.Public
     public List<String> getDocIds() {
         return documentIDs;
+    }
+
+    /**
+     * Sets the documents to specify as part of the replication.
+     */
+    public void setDocIds(List<String> docIds) {
+        documentIDs = docIds;
     }
 
     /**
      * Should the replication operate continuously, copying changes as soon as the
      * source database is modified? (Defaults to NO).
      */
-    @InterfaceAudience.Public
     public boolean isContinuous() {
         return lifecycle == Replication.Lifecycle.CONTINUOUS;
     }
@@ -808,10 +825,17 @@ abstract class ReplicationInternal {
     /**
      * Parameters to pass to the filter function.  Should map strings to strings.
      */
-    @InterfaceAudience.Public
     public Map<String, Object> getFilterParams() {
         return filterParams;
     }
+
+    /**
+     * Set parameters to pass to the filter function.
+     */
+    public void setFilterParams(Map<String, Object> filterParams) {
+        this.filterParams = filterParams;
+    }
+
 
     abstract protected void processInbox(RevisionList inbox);
 
@@ -1135,6 +1159,50 @@ abstract class ReplicationInternal {
             Log.e(Log.TAG_SYNC, "Exception in clearDbRef(): %s", e);
         }
 
+    }
+
+
+    /**
+     * For java docs, see Replication.setCookie()
+     */
+    public void setCookie(String name, String value, String path, long maxAge, boolean secure, boolean httpOnly) {
+        Date now = new Date();
+        Date expirationDate = new Date(now.getTime() + maxAge);
+        setCookie(name, value, path, expirationDate, secure, httpOnly);
+    }
+
+
+    /**
+     * For java docs, see Replication.setCookie()
+     */
+    public void setCookie(String name, String value, String path, Date expirationDate, boolean secure, boolean httpOnly) {
+        if (remote == null) {
+            throw new IllegalStateException("Cannot setCookie since remote == null");
+        }
+        BasicClientCookie2 cookie = new BasicClientCookie2(name, value);
+        cookie.setDomain(remote.getHost());
+        if (path != null && path.length() > 0) {
+            cookie.setPath(path);
+        } else {
+            cookie.setPath(remote.getPath());
+        }
+
+        cookie.setExpiryDate(expirationDate);
+        cookie.setSecure(secure);
+        List<Cookie> cookies = Arrays.asList((Cookie)cookie);
+        this.clientFactory.addCookies(cookies);
+
+    }
+
+    /**
+     * For java docs, see Replication.deleteCookie()
+     */
+    public void deleteCookie(String name) {
+        this.clientFactory.deleteCookie(name);
+    }
+
+    /* package */ HttpClientFactory getClientFactory() {
+        return clientFactory;
     }
 
 }
