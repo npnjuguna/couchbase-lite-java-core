@@ -1,17 +1,13 @@
 package com.couchbase.lite.support;
 
-import com.couchbase.lite.Database;
 import com.couchbase.lite.util.Log;
 
-import java.io.InterruptedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -140,7 +136,7 @@ public class Batcher<T> {
     public void clear() {
         Log.v(Log.TAG_SYNC, "%s: clear() called, setting inbox to null", this);
         unschedule();
-        inbox = null;
+        inbox.clear();
     }
 
     public int count() {
@@ -152,6 +148,7 @@ public class Batcher<T> {
         }
     }
 
+
     private void processNow() {
 
         Log.v(Log.TAG_SYNC, this + ": processNow() called");
@@ -159,17 +156,45 @@ public class Batcher<T> {
         scheduled = false;
         List<T> toProcess = new ArrayList<T>();
 
-        if (inbox == null || inbox.size() == 0) {
-            Log.v(Log.TAG_SYNC, this + ": processNow() called, but inbox is empty");
-            return;
-        } else {
-            toProcess.addAll(inbox);
-            inbox.clear();
-            Log.v(Log.TAG_SYNC, this + ": processNow() called, toProcess(): %s", toProcess);
-            processor.process(toProcess);
-            Log.v(Log.TAG_SYNC, this + ": processNow() finished, toProcess(): %s", toProcess);
-            lastProcessedTime = System.currentTimeMillis();
+        synchronized (this) {
+            if (inbox == null || inbox.size() == 0) {
+                Log.v(Log.TAG_SYNC, this + ": processNow() called, but inbox is empty");
+                return;
+            } else if (inbox.size() <= capacity) {
+                Log.v(Log.TAG_SYNC, "%s: inbox.size() <= capacity, adding %d items from inbox -> toProcess", this, inbox.size());
+                toProcess.addAll(inbox);
+                inbox.clear();
+            } else {
+                Log.v(Log.TAG_SYNC, "%s: processNow() called, inbox size: %d", this, inbox.size());
+                int i = 0;
+                for (T item: inbox) {
+                    toProcess.add(item);
+                    i += 1;
+                    if (i >= capacity) {
+                        break;
+                    }
+                }
+
+                for (T item : toProcess) {
+                    Log.v(Log.TAG_SYNC, "%s: processNow() removing %s from inbox", this, item);
+                    inbox.remove(item);
+                }
+
+                Log.v(Log.TAG_SYNC, "%s: inbox.size() > capacity, moving %d items from inbox -> toProcess array", this, toProcess.size());
+
+                // There are more objects left, so schedule them Real Soon:
+                scheduleWithDelay(delayToUse());
+
+            }
+
         }
+        if(toProcess != null && toProcess.size() > 0) {
+            Log.v(Log.TAG_SYNC, "%s: invoking processor with %d items ", this, toProcess.size());
+            processor.process(toProcess);
+        } else {
+            Log.v(Log.TAG_SYNC, "%s: nothing to process", this);
+        }
+        lastProcessedTime = System.currentTimeMillis();
 
     }
 
@@ -184,13 +209,17 @@ public class Batcher<T> {
 
     private void unschedule() {
         Log.v(Log.TAG_SYNC, this + ": unschedule() called");
-        scheduled = false;
-        if(flushFuture != null) {
-            boolean didCancel = flushFuture.cancel(false);
-            Log.v(Log.TAG_SYNC, "tried to cancel flushFuture, result: %s", didCancel);
 
-        } else {
-            Log.v(Log.TAG_SYNC, "flushFuture was null, doing nothing");
+        try {
+            while (!pendingFutures.isEmpty()) {
+                ScheduledFuture future = pendingFutures.take();
+                Log.d(Log.TAG_SYNC, "calling future.cancel() on %s", future);
+                future.cancel(true);
+                Log.d(Log.TAG_SYNC, "done calling future.cancel() on %s", future);
+            }
+
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
         }
     }
 
