@@ -397,5 +397,12 @@ public class Replication implements ReplicationInternal.ChangeListener {
         return replicationInternal.getClientFactory();
     }
 
+    @InterfaceAudience.Private
+    /* package */ String buildRelativeURLString(String relativePath) {
+
+        return replicationInternal.buildRelativeURLString(relativePath);
+
+    }
+
 
 }
