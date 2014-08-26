@@ -177,92 +177,86 @@ public class RemoteRequest implements Runnable {
         this.authenticator = authenticator;
     }
 
-    /**
-     * Retry this remote request, unless we've already retried MAX_RETRIES times
-     *
-     * NOTE: This assumes all requests are idempotent, since even though we got an error back, the
-     * request might have succeeded on the remote server, and by retrying we'd be issuing it again.
-     * PUT and POST requests aren't generally idempotent, but the ones sent by the replicator are.
-     *
-     * @return true if going to retry the request, false otherwise
-     */
-    protected boolean retryRequest() {
-        if (retryCount >= MAX_RETRIES) {
-            return false;
-        }
-        workExecutor.schedule(this, RETRY_DELAY_MS, TimeUnit.MILLISECONDS);
-        retryCount += 1;
-        Log.d(Log.TAG_REMOTE_REQUEST, "Will retry in %d ms", RETRY_DELAY_MS);
-        return true;
-    }
-
     protected void executeRequest(HttpClient httpClient, HttpUriRequest request) {
+
         Object fullBody = null;
         Throwable error = null;
         HttpResponse response = null;
+        retryCount = 0;
 
-        try {
+        while (retryCount < MAX_RETRIES) {
 
-            Log.v(Log.TAG_SYNC, "%s: RemoteRequest executeRequest() called, url: %s", this, url);
-
-            if (request.isAborted()) {
-                Log.v(Log.TAG_SYNC, "%s: RemoteRequest has already been aborted", this);
-                respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, request)), response);
-                return;
-            }
-
-            response = httpClient.execute(request);
-
-            // add in cookies to global store
             try {
-                if (httpClient instanceof DefaultHttpClient) {
-                    DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
-                    this.clientFactory.addCookies(defaultHttpClient.getCookieStore().getCookies());
+
+                if (retryCount > 0) {
+                    Log.v(Log.TAG_SYNC, "%s: RemoteRequest executeRequest() sleeping %d ms, url: %s", this, RETRY_DELAY_MS, url);
+                    Thread.sleep(RETRY_DELAY_MS);
                 }
-            } catch (Exception e) {
-                Log.e(Log.TAG_REMOTE_REQUEST, "Unable to add in cookies to global store", e);
-            }
 
-            StatusLine status = response.getStatusLine();
-            if (Utils.isTransientError(status) && retryRequest()) {
-                return;
-            }
+                Log.v(Log.TAG_SYNC, "%s: RemoteRequest executeRequest() called, url: %s", this, url);
 
-            if (status.getStatusCode() >= 300) {
-                Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
-                error = new HttpResponseException(status.getStatusCode(),
-                        status.getReasonPhrase());
-            } else {
-                HttpEntity temp = response.getEntity();
-                if (temp != null) {
-                    InputStream stream = null;
-                    try {
-                        stream = temp.getContent();
-                        fullBody = Manager.getObjectMapper().readValue(stream,
-                                Object.class);
-                    } finally {
+                if (request.isAborted()) {
+                    Log.v(Log.TAG_SYNC, "%s: RemoteRequest has already been aborted", this);
+                    respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, request)), response);
+                    return;
+                }
+
+                response = httpClient.execute(request);
+
+                // add in cookies to global store
+                try {
+                    if (httpClient instanceof DefaultHttpClient) {
+                        DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
+                        this.clientFactory.addCookies(defaultHttpClient.getCookieStore().getCookies());
+                    }
+                } catch (Exception e) {
+                    Log.e(Log.TAG_REMOTE_REQUEST, "Unable to add in cookies to global store", e);
+                }
+
+                StatusLine status = response.getStatusLine();
+                if (Utils.isTransientError(status)) {
+                    Log.v(Log.TAG_SYNC, "%s: RemoteRequest got transient error %s for url: %s, going to retry", this, status, url);
+                    continue;
+                }
+
+                if (status.getStatusCode() >= 300) {
+                    Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
+                    error = new HttpResponseException(status.getStatusCode(),
+                            status.getReasonPhrase());
+                } else {
+                    HttpEntity temp = response.getEntity();
+                    if (temp != null) {
+                        InputStream stream = null;
                         try {
-                            stream.close();
-                        } catch (IOException e) {
+                            stream = temp.getContent();
+                            fullBody = Manager.getObjectMapper().readValue(stream,
+                                    Object.class);
+                        } finally {
+                            try {
+                                stream.close();
+                            } catch (IOException e) {
+                            }
                         }
                     }
                 }
+            } catch (InterruptedException e) {
+                Log.e(Log.TAG_REMOTE_REQUEST, "interrupted exception", e);
+            } catch (IOException e) {
+                Log.e(Log.TAG_REMOTE_REQUEST, "io exception.  url: %s", e, url);
+                error = e;
+                // Treat all IOExceptions as transient, per:
+                // http://hc.apache.org/httpclient-3.x/exception-handling.html
+            } catch (IllegalStateException e) {
+                Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
+                error = e;
+                break;
+            } finally {
+                retryCount += 1;
             }
-        } catch (IOException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
-            error = e;
-            // Treat all IOExceptions as transient, per:
-            // http://hc.apache.org/httpclient-3.x/exception-handling.html
-            Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling retryRequest()", this);
-            if (retryRequest()) {
-                return;
-            } else {
-                Log.e(Log.TAG_SYNC, "%s: RemoteRequest failed all retries, giving up.", this);
-            }
-        } catch (Exception e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
-            error = e;
+
         }
+
+
         Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  error: %s", this, error);
         respondWithResult(fullBody, error, response);
 

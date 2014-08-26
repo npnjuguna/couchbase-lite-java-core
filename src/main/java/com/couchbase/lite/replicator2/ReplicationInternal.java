@@ -959,6 +959,7 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                logTransition(transition);
                 notifyChangeListenersStateTransition(transition);
                 ReplicationInternal.this.start();
             }
@@ -966,12 +967,13 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.RUNNING).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.d(Log.TAG_SYNC, "replicator no longer running");
+                Log.d(Log.TAG_SYNC, "replicator exiting the RUNNING method");
             }
         });
         stateMachine.configure(ReplicationState.IDLE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                logTransition(transition);
                 notifyChangeListenersStateTransition(transition);
             }
         });
@@ -984,6 +986,7 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                logTransition(transition);
                 notifyChangeListenersStateTransition(transition);
                 ReplicationInternal.this.stopGraceful();
             }
@@ -991,12 +994,16 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.d(Log.TAG_SYNC, "Entered state: %s", ReplicationState.STOPPED);
+                logTransition(transition);
                 ReplicationInternal.this.clearDbRef();
                 notifyChangeListenersStateTransition(transition);
             }
         });
 
+    }
+
+    private void logTransition(Transition<ReplicationState, ReplicationTrigger> transition) {
+        Log.d(Log.TAG_SYNC, "%s -> %s (via %s)", transition.getSource(), transition.getDestination(), transition.getTrigger());
     }
 
     private void notifyChangeListenersStateTransition(Transition<ReplicationState, ReplicationTrigger> transition) {
