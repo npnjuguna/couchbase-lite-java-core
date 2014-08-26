@@ -7,14 +7,17 @@ import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.TextUtils;
 import com.github.oxo42.stateless4j.transitions.Transition;
 
 import org.apache.http.cookie.Cookie;
 import org.apache.http.impl.cookie.BasicClientCookie2;
 
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -403,6 +406,47 @@ public class Replication implements ReplicationInternal.ChangeListener {
         return replicationInternal.buildRelativeURLString(relativePath);
 
     }
+
+    /**
+     * List of Sync Gateway channel names to filter by; a nil value means no filtering, i.e. all
+     * available channels will be synced.  Only valid for pull replications whose source database
+     * is on a Couchbase Sync Gateway server.  (This is a convenience that just reads or
+     * changes the values of .filter and .query_params.)
+     */
+    @InterfaceAudience.Public
+    public List<String> getChannels() {
+        return replicationInternal.getChannels();
+    }
+
+    /**
+     * Set the list of Sync Gateway channel names
+     */
+    @InterfaceAudience.Public
+    public void setChannels(List<String> channels) {
+        replicationInternal.setChannels(channels);
+    }
+
+    /**
+     * Name of an optional filter function to run on the source server. Only documents for
+     * which the function returns true are replicated.
+     *
+     * For a pull replication, the name looks like "designdocname/filtername".
+     * For a push replication, use the name under which you registered the filter with the Database.
+     */
+    @InterfaceAudience.Public
+    public String getFilter() {
+        return replicationInternal.getFilter();
+    }
+
+    /**
+     * Parameters to pass to the filter function.  Should map strings to strings.
+     */
+    @InterfaceAudience.Public
+    public Map<String, Object> getFilterParams() {
+        return replicationInternal.getFilterParams();
+    }
+
+
 
 
 }

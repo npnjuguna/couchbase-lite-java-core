@@ -17,6 +17,7 @@ import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.Utils;
 import com.github.oxo42.stateless4j.StateMachine;
 import com.github.oxo42.stateless4j.delegates.Action1;
@@ -50,11 +51,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Internal Replication object that does the heavy lifting
+ *
+ * @exclude
  */
 abstract class ReplicationInternal {
 
     // Change listeners can be called back synchronously or asynchronously.
     protected enum ChangeListenerNotifyStyle { SYNC, ASYNC };
+
+    public static final String BY_CHANNEL_FILTER_NAME = "sync_gateway/bychannel";
+
+    public static final String CHANNELS_QUERY_PARAM = "channels";
+
+    public static final String REPLICATOR_DATABASE_NAME = "_replicator";
 
     protected Replication parentReplication;
     protected Database db;
@@ -782,13 +791,8 @@ abstract class ReplicationInternal {
     }
 
     /**
-     * Name of an optional filter function to run on the source server. Only documents for
-     * which the function returns true are replicated.
-     *
-     * For a pull replication, the name looks like "designdocname/filtername".
-     * For a push replication, use the name under which you registered the filter with the Database.
+     * For javadocs, see Replication
      */
-    @InterfaceAudience.Public
     public String getFilter() {
         return filterName;
     }
@@ -830,7 +834,7 @@ abstract class ReplicationInternal {
     }
 
     /**
-     * Parameters to pass to the filter function.  Should map strings to strings.
+     * For javadoc, see Replication
      */
     public Map<String, Object> getFilterParams() {
         return filterParams;
@@ -1210,6 +1214,40 @@ abstract class ReplicationInternal {
 
     /* package */ HttpClientFactory getClientFactory() {
         return clientFactory;
+    }
+
+    /**
+     * For javadocs, see Replication object
+     */
+    public List<String> getChannels() {
+        if (filterParams == null || filterParams.isEmpty()) {
+            return new ArrayList<String>();
+        }
+        String params = (String) filterParams.get(CHANNELS_QUERY_PARAM);
+        if (!isPull() || getFilter() == null || !getFilter().equals(BY_CHANNEL_FILTER_NAME) || params == null || params.isEmpty()) {
+            return new ArrayList<String>();
+        }
+        String[] paramsArray = params.split(",");
+        return new ArrayList<String>(Arrays.asList(paramsArray));
+    }
+
+    /**
+     * For javadocs, see Replication object
+     */
+    public void setChannels(List<String> channels) {
+        if (channels != null && !channels.isEmpty()) {
+            if (!isPull()) {
+                Log.w(Log.TAG_SYNC, "filterChannels can only be set in pull replications");
+                return;
+            }
+            setFilter(BY_CHANNEL_FILTER_NAME);
+            Map<String, Object> filterParams = new HashMap<String, Object>();
+            filterParams.put(CHANNELS_QUERY_PARAM, TextUtils.join(",", channels));
+            setFilterParams(filterParams);
+        } else if (getFilter().equals(BY_CHANNEL_FILTER_NAME)) {
+            setFilter(null);
+            setFilterParams(null);
+        }
     }
 
 }
