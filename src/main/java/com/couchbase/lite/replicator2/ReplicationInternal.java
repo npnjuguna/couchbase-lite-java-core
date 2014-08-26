@@ -679,6 +679,13 @@ abstract class ReplicationInternal {
                     if (e != null && !Utils.is404(e)) {
                         Log.w(Log.TAG_SYNC, "%s: error getting remote checkpoint", e, this);
                         setError(e);
+
+                        // TODO: double check this behavior against iOS implementation, especially
+                        // TODO: with regards to behavior of a continuous replication.
+                        // Note: was added in order that unit test testRunReplicationWithError() finished and passed.
+                        // (before adding this, the replication would just end up in limbo and never finish)
+                        fireTrigger(ReplicationTrigger.STOP_GRACEFUL);
+
                     } else {
                         if (e != null && Utils.is404(e)) {
                             Log.d(Log.TAG_SYNC, "%s: 404 error getting remote checkpoint %s, calling maybeCreateRemoteDB", this, remoteCheckpointDocID());

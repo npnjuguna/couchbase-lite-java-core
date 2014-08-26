@@ -133,7 +133,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
      * Is this replication continous?
      */
     @InterfaceAudience.Public
-    public boolean isContinous() {
+    public boolean isContinuous() {
         return lifecycle == Lifecycle.CONTINUOUS;
     }
 
