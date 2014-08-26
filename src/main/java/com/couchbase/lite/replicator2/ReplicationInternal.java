@@ -114,6 +114,8 @@ abstract class ReplicationInternal {
         this.workExecutor = workExecutor;
         this.lifecycle = lifecycle;
 
+        this.requestHeaders = new HashMap<String, Object>();
+
         changeListeners = new CopyOnWriteArrayList<ChangeListener>();
 
         changeListenerNotifyStyle = ChangeListenerNotifyStyle.SYNC;
@@ -535,6 +537,16 @@ abstract class ReplicationInternal {
     @InterfaceAudience.Public
     public Map<String, Object> getHeaders() {
         return requestHeaders;
+    }
+
+    /**
+     * Set Extra HTTP headers to be sent in all requests to the remote server.
+     */
+    @InterfaceAudience.Public
+    public void setHeaders(Map<String, Object> requestHeadersParam) {
+        if (requestHeadersParam != null && !requestHeaders.equals(requestHeadersParam)) {
+            requestHeaders = requestHeadersParam;
+        }
     }
 
     /**

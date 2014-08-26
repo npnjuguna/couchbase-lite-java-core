@@ -881,14 +881,18 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
                 try {
                     // stop things and possibly wait for them to stop ..
-                    Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
-                    batcher.waitForPendingFutures();
+                    if (batcher != null) {
+                        Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                        batcher.waitForPendingFutures();
+                    }
 
                     Log.d(Log.TAG_SYNC, "waitForPendingFutures()");
                     waitForPendingFutures();
 
-                    Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
-                    downloadsToInsert.waitForPendingFutures();
+                    if (downloadsToInsert != null) {
+                        Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
+                        downloadsToInsert.waitForPendingFutures();
+                    }
 
                 } catch (Exception e) {
                     Log.e(Log.TAG_SYNC, "stopGraceful.run() had exception: %s", e);

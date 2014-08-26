@@ -446,7 +446,13 @@ public class Replication implements ReplicationInternal.ChangeListener {
         return replicationInternal.getFilterParams();
     }
 
-
+    /**
+     * Set Extra HTTP headers to be sent in all requests to the remote server.
+     */
+    @InterfaceAudience.Public
+    public void setHeaders(Map<String, Object> requestHeadersParam) {
+        replicationInternal.setHeaders(requestHeadersParam);
+    }
 
 
 }
