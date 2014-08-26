@@ -215,7 +215,7 @@ public class RemoteRequest implements Runnable {
                     Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
                     error = new HttpResponseException(status.getStatusCode(),
                             status.getReasonPhrase());
-                    // break;
+                    break;
                 } else {
                     HttpEntity temp = response.getEntity();
                     if (temp != null) {
@@ -231,7 +231,7 @@ public class RemoteRequest implements Runnable {
                             }
                         }
                     }
-                    // break;
+                    break;
                 }
             } catch (InterruptedException e) {
                 Log.e(Log.TAG_REMOTE_REQUEST, "interrupted exception", e);
