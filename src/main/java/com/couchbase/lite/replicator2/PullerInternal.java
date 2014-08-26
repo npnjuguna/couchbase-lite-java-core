@@ -108,7 +108,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // puller never needs to do this
     }
 
-    private void startChangeTracker() {
+    protected void startChangeTracker() {
 
         ChangeTracker.ChangeTrackerMode changeTrackerMode;
 
@@ -809,26 +809,35 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
                 break;
             case CONTINUOUS:
-                String msg = String.format("Change tracker stopped during continuous replication");
-                Log.e(Log.TAG_SYNC, msg);
-                parentReplication.setLastError(new Exception(msg));
-                stateMachine.fire(ReplicationTrigger.WAITING_FOR_CHANGES);
+                if (stateMachine.isInState(ReplicationState.OFFLINE)) {
+                    // in this case, we don't want to do anything here, since
+                    // we told the change tracker to go offline ..
+                    Log.d(Log.TAG_SYNC, "Change tracker stopped because we are going offline");
+                } else {
+                    // otherwise, try to restart the change tracker, since it should
+                    // always be running in continuous replications
+                    String msg = String.format("Change tracker stopped during continuous replication");
+                    Log.e(Log.TAG_SYNC, msg);
+                    parentReplication.setLastError(new Exception(msg));
+                    fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
 
-                int delaySeconds = 10;  // TODO: make configurable
-                Log.d(Log.TAG_SYNC, "Scheduling change tracker restart in %d seconds", delaySeconds);
-                workExecutor.schedule(new Runnable() {
-                    @Override
-                    public void run() {
-                        // the replication may have been stopped by the time this scheduled fires
-                        // so we need to check the state here.
-                        if (stateMachine.isInState(ReplicationState.RUNNING)) {
-                            Log.d(Log.TAG_SYNC, "%s still running, restarting change tracker", this);
-                            startChangeTracker();
-                        } else {
-                            Log.d(Log.TAG_SYNC, "%s still no longer running, not restarting change tracker", this);
+                    int delaySeconds = 10;  // TODO: make configurable
+                    Log.d(Log.TAG_SYNC, "Scheduling change tracker restart in %d seconds", delaySeconds);
+                    workExecutor.schedule(new Runnable() {
+                        @Override
+                        public void run() {
+                            // the replication may have been stopped by the time this scheduled fires
+                            // so we need to check the state here.
+                            if (stateMachine.isInState(ReplicationState.RUNNING)) {
+                                Log.d(Log.TAG_SYNC, "%s still running, restarting change tracker", this);
+                                startChangeTracker();
+                            } else {
+                                Log.d(Log.TAG_SYNC, "%s still no longer running, not restarting change tracker", this);
+                            }
                         }
-                    }
-                }, delaySeconds, TimeUnit.SECONDS);
+                    }, delaySeconds, TimeUnit.SECONDS);
+                }
+
 
                 break;
             default:
@@ -943,5 +952,30 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     public void setCreateTarget(boolean createTarget) {
         // silently ignore this -- doesn't make sense for pull replicator
     };
+
+    @Override
+    protected void goOffline() {
+
+        super.goOffline();
+
+        // stop change tracker
+        if (changeTracker != null) {
+            changeTracker.stop();
+        }
+
+        // TODO: stop remote requests in progress, but first
+        // TODO: write a test that verifies this actually works
+
+
+    }
+
+    @Override
+    protected void goOnline() {
+
+        super.goOnline();
+
+        // start change tracker
+        startChangeTracker();
+    }
 
 }

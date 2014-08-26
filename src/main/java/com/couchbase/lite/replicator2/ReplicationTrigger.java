@@ -7,6 +7,8 @@ package com.couchbase.lite.replicator2;
 enum ReplicationTrigger {
     START,
     WAITING_FOR_CHANGES,
+    GO_OFFLINE,
+    GO_ONLINE,
     STOP_GRACEFUL,
     STOP_IMMEDIATE
 }

@@ -7,6 +7,7 @@ public enum ReplicationState {
     INITIAL,
     RUNNING,
     IDLE,
+    OFFLINE,
     STOPPING,
     STOPPED
 }

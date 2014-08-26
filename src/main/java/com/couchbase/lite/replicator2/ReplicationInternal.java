@@ -139,6 +139,20 @@ abstract class ReplicationInternal {
     }
 
     /**
+     * Trigger this replication to go offline (async)
+     */
+    public void triggerGoOffline() {
+        fireTrigger(ReplicationTrigger.GO_OFFLINE);
+    }
+
+    /**
+     * Trigger this replication to go online (async)
+     */
+    public void triggerGoOnline() {
+        fireTrigger(ReplicationTrigger.GO_ONLINE);
+    }
+
+    /**
      * Fire a trigger to the state machine
      */
     protected void fireTrigger(final ReplicationTrigger trigger) {
@@ -191,10 +205,26 @@ abstract class ReplicationInternal {
         initAuthorizer();
 
         // call goOnline (or trigger state change into online state)
-        goOnline();
+        goOnlineInitialStartup();
 
 
     }
+
+    /**
+     * Take the replication offline
+     */
+    protected void goOffline() {
+        // implemented by subclasses
+    }
+
+    /**
+     * Put the replication back online after being offline
+     */
+    protected void goOnline() {
+        // implemented by subclasses
+
+    }
+
 
     protected void initAuthorizer() {
         // TODO: add this back in  .. See Replication constructor
@@ -202,8 +232,6 @@ abstract class ReplicationInternal {
     }
 
     protected void initBatcher() {
-
-
 
         batcher = new Batcher<RevisionInternal>(workExecutor, INBOX_CAPACITY, PROCESSOR_DELAY, new BatchProcessor<RevisionInternal>() {
             @Override
@@ -229,7 +257,7 @@ abstract class ReplicationInternal {
 
     public abstract void setCreateTarget(boolean createTarget);
 
-    protected void goOnline() {
+    protected void goOnlineInitialStartup() {
 
         remoteRequestExecutor = Executors.newFixedThreadPool(EXECUTOR_THREAD_POOL_SIZE);
         checkSession();
@@ -924,6 +952,7 @@ abstract class ReplicationInternal {
 
         // hierarchy
         stateMachine.configure(ReplicationState.IDLE).substateOf(ReplicationState.RUNNING);
+        stateMachine.configure(ReplicationState.OFFLINE).substateOf(ReplicationState.RUNNING);
 
         // permitted transitions
         stateMachine.configure(ReplicationState.INITIAL).permit(
@@ -942,6 +971,14 @@ abstract class ReplicationInternal {
                 ReplicationTrigger.STOP_GRACEFUL,
                 ReplicationState.STOPPING
         );
+        stateMachine.configure(ReplicationState.RUNNING).permit(
+                ReplicationTrigger.GO_OFFLINE,
+                ReplicationState.OFFLINE
+        );
+        stateMachine.configure(ReplicationState.OFFLINE).permit(
+                ReplicationTrigger.GO_ONLINE,
+                ReplicationState.RUNNING
+        );
         stateMachine.configure(ReplicationState.STOPPING).permit(
                 ReplicationTrigger.STOP_IMMEDIATE,
                 ReplicationState.STOPPED
@@ -954,12 +991,20 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_IMMEDIATE);
         stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
+        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.GO_OFFLINE);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.GO_OFFLINE);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.GO_OFFLINE);
+        stateMachine.configure(ReplicationState.OFFLINE).ignore(ReplicationTrigger.GO_OFFLINE);
+        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.GO_ONLINE);
+        stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.GO_ONLINE);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.GO_ONLINE);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.GO_ONLINE);
+        stateMachine.configure(ReplicationState.IDLE).ignore(ReplicationTrigger.GO_ONLINE);
 
         // actions
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                logTransition(transition);
                 notifyChangeListenersStateTransition(transition);
                 ReplicationInternal.this.start();
             }
@@ -973,7 +1018,6 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.IDLE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                logTransition(transition);
                 notifyChangeListenersStateTransition(transition);
             }
         });
@@ -983,10 +1027,23 @@ abstract class ReplicationInternal {
                 notifyChangeListenersStateTransition(transition);
             }
         });
+        stateMachine.configure(ReplicationState.OFFLINE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
+            @Override
+            public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                goOffline();
+                notifyChangeListenersStateTransition(transition);
+            }
+        });
+        stateMachine.configure(ReplicationState.OFFLINE).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
+            @Override
+            public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                goOnline();
+                notifyChangeListenersStateTransition(transition);
+            }
+        });
         stateMachine.configure(ReplicationState.STOPPING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                logTransition(transition);
                 notifyChangeListenersStateTransition(transition);
                 ReplicationInternal.this.stopGraceful();
             }
@@ -994,7 +1051,6 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                logTransition(transition);
                 ReplicationInternal.this.clearDbRef();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1007,6 +1063,7 @@ abstract class ReplicationInternal {
     }
 
     private void notifyChangeListenersStateTransition(Transition<ReplicationState, ReplicationTrigger> transition) {
+        logTransition(transition);
         Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
         ReplicationStateTransition replicationStateTransition = new ReplicationStateTransition(transition);
         changeEvent.setTransition(replicationStateTransition);
@@ -1268,6 +1325,8 @@ abstract class ReplicationInternal {
             setFilterParams(null);
         }
     }
+
+
 
 }
 

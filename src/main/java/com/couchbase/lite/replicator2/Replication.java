@@ -110,6 +110,22 @@ public class Replication implements ReplicationInternal.ChangeListener {
     }
 
     /**
+     * Tell the replication to go offline, asynchronously.
+     */
+    @InterfaceAudience.Public
+    public void goOffline() {
+        replicationInternal.triggerGoOffline();
+    }
+
+    /**
+     * Tell the replication to go online, asynchronously.
+     */
+    @InterfaceAudience.Public
+    public void goOnline() {
+        replicationInternal.triggerGoOnline();
+    }
+
+    /**
      * True while the replication is running, False if it's stopped.
      * Note that a continuous replication never actually stops; it only goes idle waiting for new
      * data to appear.
@@ -181,6 +197,14 @@ public class Replication implements ReplicationInternal.ChangeListener {
     }
 
     /**
+     * Removes the specified delegate as a listener for the Replication change event.
+     */
+    @InterfaceAudience.Public
+    public void removeChangeListener(ChangeListener changeListener) {
+        changeListeners.remove(changeListener);
+    }
+
+    /**
      * This is called back for changes from the ReplicationInternal.
      * Simply propagate the events back to all listeners.
      */
@@ -190,12 +214,10 @@ public class Replication implements ReplicationInternal.ChangeListener {
             try {
                 changeListener.changed(event);
             } catch (Exception e) {
-                Log.e(Log.TAG_SYNC, "Exception calling changeListener.changed: %s", e);
+                Log.e(Log.TAG_SYNC, "Exception calling changeListener.changed", e);
             }
         }
     }
-
-
 
     /**
      * The error status of the replication, or null if there have not been any errors since
