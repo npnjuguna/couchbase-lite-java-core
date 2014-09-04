@@ -888,6 +888,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                     if (e != null) {
                         Log.d(Log.TAG_SYNC, "%s: Login failed for path: %s", this, loginPath);
                         setError(e);
+
                     }
                     else {
                         Log.v(Log.TAG_SYNC, "%s: Successfully logged in!", this);

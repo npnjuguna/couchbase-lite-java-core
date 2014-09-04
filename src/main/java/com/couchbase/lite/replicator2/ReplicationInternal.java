@@ -345,6 +345,13 @@ abstract class ReplicationInternal {
                     if (e != null) {
                         Log.d(Log.TAG_SYNC, "%s: Login failed for path: %s", this, loginPath);
                         setError(e);
+
+                        // TODO: double check this behavior against iOS implementation, especially
+                        // TODO: with regards to behavior of a continuous replication.
+                        // Note: was added in order that unit test testReplicatorErrorStatus() finished and passed.
+                        // (before adding this, the replication would just end up in limbo and never finish)
+                        triggerStop();
+
                     }
                     else {
                         Log.v(Log.TAG_SYNC, "%s: Successfully logged in!", this);
@@ -733,7 +740,7 @@ abstract class ReplicationInternal {
                         // TODO: with regards to behavior of a continuous replication.
                         // Note: was added in order that unit test testRunReplicationWithError() finished and passed.
                         // (before adding this, the replication would just end up in limbo and never finish)
-                        fireTrigger(ReplicationTrigger.STOP_GRACEFUL);
+                        fireTrigger(ReplicationTrigger.STOP_GRACEFUL);  // TODO: call triggerStop(); just to be more consistent
 
                     } else {
                         if (e != null && Utils.is404(e)) {

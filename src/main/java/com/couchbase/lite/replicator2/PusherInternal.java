@@ -133,6 +133,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             // wait for batcher's pending futures
             if (batcher != null) {
                 Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                // TODO: should we call batcher.flushAll(); here?
                 batcher.waitForPendingFutures();
             }
 

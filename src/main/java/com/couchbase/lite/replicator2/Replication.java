@@ -2,6 +2,7 @@ package com.couchbase.lite.replicator2;
 
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
+import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
@@ -40,6 +41,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
     protected Lifecycle lifecycle;
     protected List<ChangeListener> changeListeners;
     protected Throwable lastError;
+
 
     /**
      * Constructor
@@ -170,6 +172,22 @@ public class Replication implements ReplicationInternal.ChangeListener {
 
         }
 
+    }
+
+    /**
+     * Set the Authenticator used for authenticating with the Sync Gateway
+     */
+    @InterfaceAudience.Public
+    public void setAuthenticator(Authenticator authenticator) {
+        replicationInternal.setAuthenticator(authenticator);
+    }
+
+    /**
+     * Get the Authenticator used for authenticating with the Sync Gateway
+     */
+    @InterfaceAudience.Public
+    public Authenticator getAuthenticator() {
+        return replicationInternal.getAuthenticator();
     }
 
     /**

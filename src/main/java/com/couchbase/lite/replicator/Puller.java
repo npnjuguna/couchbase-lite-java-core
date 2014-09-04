@@ -124,7 +124,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         super.stop();
 
         if (downloadsToInsert != null) {
-            downloadsToInsert.flush();
+            downloadsToInsert.flush();  // TODO: iOS code calls flushAll() here, should we call that?
         }
     }
 
@@ -285,7 +285,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
         if (batcher != null) {
             Log.d(Log.TAG_SYNC, "%s: calling batcher.flush().  batcher.count() is %d", this, batcher.count());
-            batcher.flush();
+            batcher.flush();  // TODO: iOS code calls flushAll() here, should we call that?
         }
         if (!isContinuous()) {
             // the asyncTaskFinished needs to run on the work executor

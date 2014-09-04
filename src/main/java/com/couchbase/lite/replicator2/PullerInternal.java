@@ -806,7 +806,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         switch (lifecycle) {
             case ONESHOT:
                 Log.d(Log.TAG_SYNC, "fire STOP_GRACEFUL");
-                stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
+                stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);  // TODO: call triggerStop(); instead of this, just to be more consistent
                 break;
             case CONTINUOUS:
                 if (stateMachine.isInState(ReplicationState.OFFLINE)) {
@@ -892,6 +892,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     // stop things and possibly wait for them to stop ..
                     if (batcher != null) {
                         Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                        // TODO: should we call batcher.flushAll(); here?
                         batcher.waitForPendingFutures();
                     }
 
@@ -900,6 +901,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
                     if (downloadsToInsert != null) {
                         Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
+                        // TODO: should we call downloadsToInsert.flushAll(); here?
                         downloadsToInsert.waitForPendingFutures();
                     }
 
