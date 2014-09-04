@@ -904,6 +904,13 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         downloadsToInsert.waitForPendingFutures();
                     }
 
+                    if (changeTracker != null) {
+                        Log.d(Log.TAG_SYNC, "stopping change tracker");
+                        changeTracker.stop();
+                        Log.d(Log.TAG_SYNC, "stopped change tracker");
+
+                    }
+
                 } catch (Exception e) {
                     Log.e(Log.TAG_SYNC, "stopGraceful.run() had exception: %s", e);
                     e.printStackTrace();
