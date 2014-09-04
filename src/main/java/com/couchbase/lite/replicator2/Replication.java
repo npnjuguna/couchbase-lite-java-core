@@ -500,6 +500,15 @@ public class Replication implements ReplicationInternal.ChangeListener {
     }
 
     /**
+     * Extra HTTP headers to send in all requests to the remote server.
+     * Should map strings (header names) to strings.
+     */
+    @InterfaceAudience.Public
+    public Map<String, Object> getHeaders() {
+        return replicationInternal.getHeaders();
+    }
+
+    /**
      * @exclude
      */
     @InterfaceAudience.Private

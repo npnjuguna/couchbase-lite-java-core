@@ -41,10 +41,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -92,6 +94,7 @@ abstract class ReplicationInternal {
     private int revisionsFailed;
     protected CollectionUtils.Functor<RevisionInternal,RevisionInternal> revisionBodyTransformationBlock;
     protected String sessionID;
+    protected BlockingQueue<Future> pendingFutures;
 
     // the code assumes this is a _single threaded_ work executor.
     // if it's not, the behavior will be buggy.  I don't see a way to assert this in the code.
@@ -121,6 +124,8 @@ abstract class ReplicationInternal {
         changeListeners = new CopyOnWriteArrayList<ChangeListener>();
 
         changeListenerNotifyStyle = ChangeListenerNotifyStyle.SYNC;
+
+        pendingFutures = new LinkedBlockingQueue<Future>();
 
         initializeStateMachine();
 
@@ -197,8 +202,7 @@ abstract class ReplicationInternal {
 
         }
 
-        // TODO:
-        // db.addActiveReplication();
+        db.addActiveReplication(parentReplication);
 
         initSessionId();
 
@@ -292,7 +296,7 @@ abstract class ReplicationInternal {
         Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: checkSessionAtPath() calling asyncTaskStarted()", this, Thread.currentThread());
 
         asyncTaskStarted();
-        sendAsyncRequest("GET", sessionPath, null, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("GET", sessionPath, null, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object result, Throwable error) {
@@ -331,6 +335,7 @@ abstract class ReplicationInternal {
             }
 
         });
+        pendingFutures.add(future);
     }
 
     @InterfaceAudience.Private
@@ -349,7 +354,7 @@ abstract class ReplicationInternal {
         Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: login() calling asyncTaskStarted()", this, Thread.currentThread());
 
         asyncTaskStarted();
-        sendAsyncRequest("POST", loginPath, loginParameters, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("POST", loginPath, loginParameters, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object result, Throwable e) {
@@ -377,6 +382,7 @@ abstract class ReplicationInternal {
             }
 
         });
+        pendingFutures.add(future);
 
     }
 
@@ -625,7 +631,7 @@ abstract class ReplicationInternal {
 
         final String checkpointID = remoteCheckpointDocID;
         Log.d(Log.TAG_SYNC, "%s: start put remote _local document.  checkpointID: %s body: %s", this, checkpointID, body);
-        sendAsyncRequest("PUT", "/_local/" + checkpointID, body, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("PUT", "/_local/" + checkpointID, body, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object result, Throwable e) {
@@ -675,6 +681,7 @@ abstract class ReplicationInternal {
 
             }
         });
+        pendingFutures.add(future);
     }
 
     /**
@@ -686,7 +693,7 @@ abstract class ReplicationInternal {
         Log.d(Log.TAG_SYNC, "%s: Refreshing remote checkpoint to get its _rev...", this);
         Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: refreshRemoteCheckpointDoc() calling asyncTaskStarted()", this, Thread.currentThread());
         asyncTaskStarted();
-        sendAsyncRequest("GET", "/_local/" + remoteCheckpointDocID(), null, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("GET", "/_local/" + remoteCheckpointDocID(), null, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object result, Throwable e) {
@@ -709,6 +716,7 @@ abstract class ReplicationInternal {
                 }
             }
         });
+        pendingFutures.add(future);
 
     }
 
@@ -738,7 +746,7 @@ abstract class ReplicationInternal {
         Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: fetchRemoteCheckpointDoc() calling asyncTaskStarted()", this, Thread.currentThread());
 
         asyncTaskStarted();
-        sendAsyncRequest("GET", "/_local/" + checkpointId, null, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("GET", "/_local/" + checkpointId, null, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object result, Throwable e) {
@@ -781,6 +789,7 @@ abstract class ReplicationInternal {
             }
 
         });
+        pendingFutures.add(future);
     }
 
     

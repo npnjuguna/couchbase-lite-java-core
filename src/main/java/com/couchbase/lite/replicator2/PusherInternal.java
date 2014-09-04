@@ -56,7 +56,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     private boolean dontSendMultipart = false;
     SortedSet<Long> pendingSequences;
     Long maxPendingSequence;
-    private BlockingQueue<Future> pendingFutures;
 
     /**
      * Constructor
@@ -65,7 +64,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @InterfaceAudience.Private
     public PusherInternal(Database db, URL remote, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor, Replication.Lifecycle lifecycle, Replication parentReplication) {
         super(db, remote, clientFactory, workExecutor, lifecycle, parentReplication);
-        pendingFutures = new LinkedBlockingQueue<Future>();
     }
 
     @Override

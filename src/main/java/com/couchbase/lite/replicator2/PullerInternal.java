@@ -62,13 +62,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     protected List<RevisionInternal> deletedRevsToPull;
     protected int httpConnectionCount;
     protected Batcher<RevisionInternal> downloadsToInsert;
-    private BlockingQueue<Future> pendingFutures;
-
-
 
     public PullerInternal(Database db, URL remote, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor, Replication.Lifecycle lifecycle, Replication parentReplication) {
         super(db, remote, clientFactory, workExecutor, lifecycle, parentReplication);
-        pendingFutures = new LinkedBlockingQueue<Future>();
     }
 
     /**
