@@ -1033,8 +1033,8 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                notifyChangeListenersStateTransition(transition);
                 ReplicationInternal.this.start();
+                notifyChangeListenersStateTransition(transition);
             }
         });
         stateMachine.configure(ReplicationState.RUNNING).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
@@ -1072,8 +1072,8 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                notifyChangeListenersStateTransition(transition);
                 ReplicationInternal.this.stopGraceful();
+                notifyChangeListenersStateTransition(transition);
             }
         });
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
