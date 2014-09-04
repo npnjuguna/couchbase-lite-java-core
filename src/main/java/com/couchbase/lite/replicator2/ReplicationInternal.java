@@ -95,6 +95,9 @@ abstract class ReplicationInternal {
     protected CollectionUtils.Functor<RevisionInternal,RevisionInternal> revisionBodyTransformationBlock;
     protected String sessionID;
     protected BlockingQueue<Future> pendingFutures;
+    private boolean savingCheckpoint;
+    private boolean overdueForCheckpointSave;
+
 
     // the code assumes this is a _single threaded_ work executor.
     // if it's not, the behavior will be buggy.  I don't see a way to assert this in the code.
@@ -104,6 +107,7 @@ abstract class ReplicationInternal {
     protected List<ChangeListener> changeListeners;
     protected Replication.Lifecycle lifecycle;
     protected ChangeListenerNotifyStyle changeListenerNotifyStyle;
+
 
     /**
      * Constructor
@@ -608,22 +612,23 @@ abstract class ReplicationInternal {
     @InterfaceAudience.Private
     public void saveLastSequence() {
 
-        /* TODO: use state machine for this
         if (savingCheckpoint) {
             // If a save is already in progress, don't do anything. (The completion block will trigger
             // another save after the first one finishes.)
-            overdueForSave = true;
+            overdueForCheckpointSave = true;
             return;
-        } */
+        }
 
-        Log.d(Log.TAG_SYNC, "%s: saveLastSequence() called. lastSequence: %s", this, lastSequence);
+        savingCheckpoint = true;
+
+        Log.d(Log.TAG_SYNC, "%s: saveLastSequence() called. lastSequence: %s remoteCheckpoint: %s", this, lastSequence, remoteCheckpoint);
         final Map<String, Object> body = new HashMap<String, Object>();
         if (remoteCheckpoint != null) {
             body.putAll(remoteCheckpoint);
         }
         body.put("lastSequence", lastSequence);
 
-        String remoteCheckpointDocID = remoteCheckpointDocID();
+        final String remoteCheckpointDocID = remoteCheckpointDocID();
         if (remoteCheckpointDocID == null) {
             Log.w(Log.TAG_SYNC, "%s: remoteCheckpointDocID is null, aborting saveLastSequence()", this);
             return;
@@ -635,49 +640,53 @@ abstract class ReplicationInternal {
 
             @Override
             public void onCompletion(Object result, Throwable e) {
-                Log.d(Log.TAG_SYNC, "%s: put remote _local document request finished.  checkpointID: %s body: %s", this, checkpointID, body);
-                if (e != null) {
-                    Log.w(Log.TAG_SYNC, "%s: Unable to save remote checkpoint", e, this);
-                }
-                if (db == null) {
-                    Log.w(Log.TAG_SYNC, "%s: Database is null, ignoring remote checkpoint response", this);
-                    return;
-                }
-                if (!db.isOpen()) {
-                    Log.w(Log.TAG_SYNC, "%s: Database is closed, ignoring remote checkpoint response", this);
-                    return;
-                }
-                if (e != null) {
-                    // Failed to save checkpoint:
-                    switch (Utils.getStatusFromError(e)) {
-                        case Status.NOT_FOUND:
-                            Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: 404 NOT FOUND", this);
-                            remoteCheckpoint = null;  // doc deleted or db reset
-                            break;
-                        case Status.CONFLICT:
-                            Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: 409 CONFLICT", this);
-                            refreshRemoteCheckpointDoc();
-                            break;
-                        default:
-                            Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: %s", this, e);
-                            // TODO: On 401 or 403, and this is a pull, remember that remote
-                            // TODo: is read-only & don't attempt to read its checkpoint next time.
-                            break;
-                    }
-                } else {
-                    // Saved checkpoint:
-                    Log.i(Log.TAG_SYNC, "%s: saved remote checkpoint, updating local checkpoint", this);
-                    Map<String, Object> response = (Map<String, Object>) result;
-                    body.put("_rev", response.get("rev"));
-                    remoteCheckpoint = body;
-                    db.setLastSequence(lastSequence, checkpointID, !isPull());
-                }
 
-                /* TODO: use state machine for this
-                if (overdueForSave) {
-                    Log.i(Log.TAG_SYNC, "%s: overdueForSave == true, calling saveLastSequence()", this);
-                    saveLastSequence();
-                } */
+                Log.d(Log.TAG_SYNC, "%s: put remote _local document request finished.  checkpointID: %s body: %s", this, checkpointID, body);
+
+                try {
+
+                    if (e != null) {
+                        Log.w(Log.TAG_SYNC, "%s: Unable to save remote checkpoint", e, this);
+                        // Failed to save checkpoint:
+                        switch (Utils.getStatusFromError(e)) {
+                            case Status.NOT_FOUND:
+                                Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: 404 NOT FOUND", this);
+                                remoteCheckpoint = null;  // doc deleted or db reset
+                                break;
+                            case Status.CONFLICT:
+                                Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: 409 CONFLICT", this);
+                                refreshRemoteCheckpointDoc();
+                                break;
+                            default:
+                                Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: %s", this, e);
+                                // TODO: On 401 or 403, and this is a pull, remember that remote
+                                // TODo: is read-only & don't attempt to read its checkpoint next time.
+                                break;
+                        }
+                    } else {
+                        // Saved checkpoint:
+                        Map<String, Object> response = (Map<String, Object>) result;
+                        body.put("_rev", response.get("rev"));
+                        remoteCheckpoint = body;
+                        if (db != null && db.open()) {
+                            Log.d(Log.TAG_SYNC, "%s: saved remote checkpoint, updating local checkpoint.  remoteCheckpoint: %s", this, remoteCheckpoint);
+                            db.setLastSequence(lastSequence, checkpointID, !isPull());
+                        } else {
+                            Log.w(Log.TAG_SYNC, "%s: Database is null or closed, not calling db.setLastSequence() ", this);
+                        }
+                    }
+
+                } finally {
+
+                    savingCheckpoint = false;
+
+                    if (overdueForCheckpointSave) {
+                        Log.i(Log.TAG_SYNC, "%s: overdueForCheckpointSave == true, calling saveLastSequence()", this);
+                        overdueForCheckpointSave = false;
+                        saveLastSequence();
+                    }
+
+                }
 
             }
         });
