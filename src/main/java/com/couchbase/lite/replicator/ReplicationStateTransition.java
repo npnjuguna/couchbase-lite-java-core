@@ -1,4 +1,4 @@
-package com.couchbase.lite.replicator2;
+package com.couchbase.lite.replicator;
 
 import com.github.oxo42.stateless4j.transitions.Transition;
 

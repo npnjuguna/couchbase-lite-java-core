@@ -1,4 +1,4 @@
-package com.couchbase.lite.replicator2;
+package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.BlobKey;
 import com.couchbase.lite.BlobStore;
@@ -16,7 +16,6 @@ import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
-import com.couchbase.lite.util.Utils;
 
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.entity.mime.MultipartEntity;
@@ -37,10 +36,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**

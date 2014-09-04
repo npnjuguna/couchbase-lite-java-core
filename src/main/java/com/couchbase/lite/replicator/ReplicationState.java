@@ -1,4 +1,4 @@
-package com.couchbase.lite.replicator2;
+package com.couchbase.lite.replicator;
 
 /**
  * The various states that a Replication can be in

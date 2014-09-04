@@ -1,4 +1,4 @@
-package com.couchbase.lite.replicator2;
+package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Misc;
@@ -48,7 +48,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
