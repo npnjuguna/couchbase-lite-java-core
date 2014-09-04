@@ -695,10 +695,6 @@ public final class Database {
         return new Replication(this, remote, Replication.Direction.PUSH, null, manager.getWorkExecutor());
     }
 
-    public com.couchbase.lite.replicator2.Replication createPushReplication2(URL remote) {
-        return new com.couchbase.lite.replicator2.Replication(this, remote, com.couchbase.lite.replicator2.Replication.Direction.PUSH);
-    }
-
     /**
      * Creates a new Replication that will pull from the source Database at the given url.
      *
@@ -709,10 +705,6 @@ public final class Database {
     public Replication createPullReplication(URL remote) {
         return new Replication(this, remote, Replication.Direction.PULL, null, manager.getWorkExecutor());
 
-    }
-
-    public com.couchbase.lite.replicator2.Replication createPullReplication2(URL remote) {
-        return new com.couchbase.lite.replicator2.Replication(this, remote, com.couchbase.lite.replicator2.Replication.Direction.PULL);
     }
 
     /**

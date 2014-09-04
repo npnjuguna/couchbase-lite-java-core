@@ -129,6 +129,11 @@ public final class Manager {
         }
 
         upgradeOldDatabaseFiles(directoryFile);
+
+        // this must be a single threaded executor due to contract w/ Replication object
+        // which must run on either:
+        // - a shared single threaded executor
+        // - its own single threaded executor
         workExecutor = Executors.newSingleThreadScheduledExecutor();
 
     }
