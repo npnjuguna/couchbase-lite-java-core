@@ -21,10 +21,7 @@ import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
-import com.couchbase.lite.replicator.Puller;
-import com.couchbase.lite.replicator.Pusher;
-import com.couchbase.lite.replicator.Replication;
-import com.couchbase.lite.replicator2.PullerInternal;
+import com.couchbase.lite.replicator2.Replication;
 import com.couchbase.lite.storage.ContentValues;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
@@ -695,8 +692,7 @@ public final class Database {
      */
     @InterfaceAudience.Public
     public Replication createPushReplication(URL remote) {
-        final boolean continuous = false;
-        return new Pusher(this, remote, continuous, manager.getWorkExecutor());
+        return new Replication(this, remote, Replication.Direction.PUSH, null, manager.getWorkExecutor());
     }
 
     public com.couchbase.lite.replicator2.Replication createPushReplication2(URL remote) {
@@ -711,8 +707,8 @@ public final class Database {
      */
     @InterfaceAudience.Public
     public Replication createPullReplication(URL remote) {
-        final boolean continuous = false;
-        return new Puller(this, remote, continuous, manager.getWorkExecutor());
+        return new Replication(this, remote, Replication.Direction.PULL, null, manager.getWorkExecutor());
+
     }
 
     public com.couchbase.lite.replicator2.Replication createPullReplication2(URL remote) {
@@ -4030,8 +4026,12 @@ public final class Database {
         if(result != null) {
             return result;
         }
-        result = push ? new Pusher(this, remote, continuous, httpClientFactory, workExecutor) : new Puller(this, remote, continuous, httpClientFactory, workExecutor);
-
+        if (push) {
+            result = new Replication(this, remote, Replication.Direction.PUSH, httpClientFactory, workExecutor);
+        } else {
+            result = new Replication(this, remote, Replication.Direction.PULL, httpClientFactory, workExecutor);
+        }
+        result.setContinuous(continuous);
         return result;
     }
 

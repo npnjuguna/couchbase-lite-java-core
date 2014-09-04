@@ -33,6 +33,11 @@ public class Replication implements ReplicationInternal.ChangeListener {
     public enum Direction { PULL, PUSH };
     public enum Lifecycle { ONESHOT, CONTINUOUS };
 
+    /**
+     * @exclude
+     */
+    public static final String REPLICATOR_DATABASE_NAME = "_replicator";
+
     protected Database db;
     protected URL remote;
     protected HttpClientFactory clientFactory;
@@ -494,5 +499,44 @@ public class Replication implements ReplicationInternal.ChangeListener {
         replicationInternal.setHeaders(requestHeadersParam);
     }
 
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public void databaseClosing() {
+        replicationInternal.databaseClosing();
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public String getSessionID() {
+        return replicationInternal.getSessionID();
+    }
+
+    /**
+     * Get the local database which is the source or target of this replication
+     */
+    @InterfaceAudience.Public
+    public Database getLocalDatabase() {
+        return db;
+    }
+
+    /**
+     * Get the remote URL which is the source or target of this replication
+     */
+    @InterfaceAudience.Public
+    public URL getRemoteUrl() {
+        return remote;
+    }
+
+    /**
+     * Is this a pull replication?  (Eg, it pulls data from Sync Gateway -> Device running CBL?)
+     */
+    @InterfaceAudience.Public
+    public boolean isPull() {
+        return replicationInternal.isPull();
+    }
 
 }

@@ -65,6 +65,8 @@ abstract class ReplicationInternal {
 
     public static final String REPLICATOR_DATABASE_NAME = "_replicator";
 
+    private static int lastSessionID = 0;
+
     protected Replication parentReplication;
     protected Database db;
     protected URL remote;
@@ -89,7 +91,7 @@ abstract class ReplicationInternal {
     protected AtomicInteger changesCount;
     private int revisionsFailed;
     protected CollectionUtils.Functor<RevisionInternal,RevisionInternal> revisionBodyTransformationBlock;
-
+    protected String sessionID;
 
     // the code assumes this is a _single threaded_ work executor.
     // if it's not, the behavior will be buggy.  I don't see a way to assert this in the code.
@@ -198,6 +200,8 @@ abstract class ReplicationInternal {
         // TODO:
         // db.addActiveReplication();
 
+        initSessionId();
+
         // init batcher
         initBatcher();
 
@@ -208,6 +212,10 @@ abstract class ReplicationInternal {
         goOnlineInitialStartup();
 
 
+    }
+
+    private void initSessionId() {
+        this.sessionID = String.format("repl%03d", ++lastSessionID);
     }
 
     /**
@@ -225,6 +233,10 @@ abstract class ReplicationInternal {
 
     }
 
+    public void databaseClosing() {
+        saveLastSequence();
+        triggerStop();
+    }
 
     protected void initAuthorizer() {
         // TODO: add this back in  .. See Replication constructor
@@ -1334,7 +1346,9 @@ abstract class ReplicationInternal {
     }
 
 
-
+    public String getSessionID() {
+        return sessionID;
+    }
 }
 
 

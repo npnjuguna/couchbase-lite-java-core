@@ -4,9 +4,7 @@ import com.couchbase.lite.auth.Authorizer;
 import com.couchbase.lite.auth.FacebookAuthorizer;
 import com.couchbase.lite.auth.PersonaAuthorizer;
 import com.couchbase.lite.internal.InterfaceAudience;
-import com.couchbase.lite.replicator.Puller;
-import com.couchbase.lite.replicator.Pusher;
-import com.couchbase.lite.replicator.Replication;
+import com.couchbase.lite.replicator2.Replication;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.Version;
@@ -445,10 +443,10 @@ public final class Manager {
         final boolean continuous = false;
 
         if (push) {
-            replicator = new Pusher(db, remote, continuous, getWorkExecutor());
+            replicator = new Replication(db, remote, Replication.Direction.PUSH, null, getWorkExecutor());
         }
         else {
-            replicator = new Puller(db, remote, continuous, getWorkExecutor());
+            replicator = new Replication(db, remote, Replication.Direction.PULL, null, getWorkExecutor());
         }
 
         replications.add(replicator);
@@ -621,7 +619,7 @@ public final class Manager {
             }
 
             if(push) {
-                ((Pusher)repl).setCreateTarget(createTarget);
+                repl.setCreateTarget(createTarget);
             }
 
 

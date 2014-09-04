@@ -51,6 +51,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     // Maximum number of revs to fetch in a single bulk request
     public static final int MAX_REVS_TO_GET_IN_BULK = 50;
 
+    // Maximum number of revision IDs to pass in an "?atts_since=" query param
+    public static final int MAX_NUMBER_OF_ATTS_SINCE = 50;
+
     private ChangeTracker changeTracker;
     protected SequenceMap pendingSequences;
     protected Boolean canBulkGet;  // Does the server support _bulk_get requests?

@@ -25,7 +25,7 @@ import com.couchbase.lite.auth.PersonaAuthorizer;
 import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.RevisionInternal;
-import com.couchbase.lite.replicator.Replication;
+import com.couchbase.lite.replicator2.Replication;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
