@@ -2,6 +2,7 @@ package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
+import com.couchbase.lite.NetworkReachabilityListener;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
@@ -21,7 +22,7 @@ import java.util.concurrent.ScheduledExecutorService;
 /**
  * The external facade for the Replication API
  */
-public class Replication implements ReplicationInternal.ChangeListener {
+public class Replication implements ReplicationInternal.ChangeListener, NetworkReachabilityListener {
 
     public enum Direction { PULL, PUSH };
     public enum Lifecycle { ONESHOT, CONTINUOUS };
@@ -591,6 +592,18 @@ public class Replication implements ReplicationInternal.ChangeListener {
     @InterfaceAudience.Public
     public boolean isPull() {
         return replicationInternal.isPull();
+    }
+
+    @Override
+    @InterfaceAudience.Private
+    public void networkReachable() {
+        goOnline();
+    }
+
+    @Override
+    @InterfaceAudience.Private
+    public void networkUnreachable() {
+        goOffline();
     }
 
 }

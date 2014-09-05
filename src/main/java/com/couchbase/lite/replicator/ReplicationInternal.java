@@ -219,6 +219,7 @@ abstract class ReplicationInternal {
         // call goOnline (or trigger state change into online state)
         goOnlineInitialStartup();
 
+        initNetworkReachabilityManager();
 
     }
 
@@ -271,6 +272,10 @@ abstract class ReplicationInternal {
         });
 
 
+    }
+
+    protected void initNetworkReachabilityManager() {
+        db.getManager().getContext().getNetworkReachabilityManager().addNetworkReachabilityListener(parentReplication);
     }
 
     public abstract boolean shouldCreateTarget();
