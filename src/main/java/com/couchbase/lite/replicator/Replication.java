@@ -14,6 +14,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -130,6 +131,35 @@ public class Replication implements ReplicationInternal.ChangeListener {
 
         replicationInternal.triggerStart();
     }
+
+    /**
+     * Restarts the replication.  This blocks until the replication successfully stops.
+     */
+    @InterfaceAudience.Public
+    public void restart() {
+
+        final CountDownLatch stopped = new CountDownLatch(1);
+        addChangeListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event) {
+                if (event.getTransition() != null && event.getTransition().getDestination() == ReplicationState.STOPPED) {
+                    stopped.countDown();
+                }
+            }
+        });
+
+        stop();
+
+        try {
+            stopped.await();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        start();
+
+    }
+
 
     /**
      * Tell the replication to go offline, asynchronously.
