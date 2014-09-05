@@ -581,9 +581,12 @@ abstract class ReplicationInternal {
     /**
      * Get the local database which is the source or target of this replication
      */
-    @InterfaceAudience.Public
-    public Database getLocalDatabase() {
+    /* package */ Database getLocalDatabase() {
         return db;
+    }
+
+    /* package */ void setLocalDatabase(Database db) {
+        this.db = db;
     }
 
     /**

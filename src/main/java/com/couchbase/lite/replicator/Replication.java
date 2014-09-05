@@ -38,6 +38,7 @@ public class Replication implements ReplicationInternal.ChangeListener {
     protected Lifecycle lifecycle;
     protected List<ChangeListener> changeListeners;
     protected Throwable lastError;
+    protected Direction direction;
 
 
     /**
@@ -68,9 +69,15 @@ public class Replication implements ReplicationInternal.ChangeListener {
         this.workExecutor = workExecutor;
         this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
         this.lifecycle = Lifecycle.ONESHOT;
+        this.direction = direction;
 
         setClientFactory(clientFactory);
 
+        initReplicationInternal();
+
+    }
+
+    private void initReplicationInternal() {
         switch (direction) {
             case PULL:
                 replicationInternal = new PullerInternal(
@@ -105,6 +112,22 @@ public class Replication implements ReplicationInternal.ChangeListener {
      */
     @InterfaceAudience.Public
     public void start() {
+
+        if (replicationInternal == null) {
+            initReplicationInternal();
+        } else {
+            if (replicationInternal.stateMachine.isInState(ReplicationState.INITIAL)) {
+                // great, it's ready to be started, nothing to do
+            } else if (replicationInternal.stateMachine.isInState(ReplicationState.STOPPED)) {
+                // if there was a previous internal replication and it's in the STOPPED state, then
+                // start a fresh internal replication
+                initReplicationInternal();
+            } else {
+                String mesg = String.format("replicationInternal in unexpected state: %s", replicationInternal.stateMachine.getState());
+                throw new RuntimeException(mesg);
+            }
+        }
+
         replicationInternal.triggerStart();
     }
 
