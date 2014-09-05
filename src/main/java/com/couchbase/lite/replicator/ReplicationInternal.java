@@ -205,6 +205,7 @@ abstract class ReplicationInternal {
 
         }
 
+        db.addReplication(parentReplication);
         db.addActiveReplication(parentReplication);
 
         initSessionId();
@@ -1044,8 +1045,13 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                Log.d(Log.TAG_SYNC, "entered the RUNNING state, calling start()");
                 ReplicationInternal.this.start();
+                Log.d(Log.TAG_SYNC, "called start(), calling notifyChangeListenersStateTransition");
+
                 notifyChangeListenersStateTransition(transition);
+                Log.d(Log.TAG_SYNC, "called notifyChangeListenersStateTransition");
+
             }
         });
         stateMachine.configure(ReplicationState.RUNNING).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
