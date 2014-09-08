@@ -303,6 +303,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
     }
 
+    protected void goOnline() {
+        checkSession();
+    }
 
     @Override
     @InterfaceAudience.Private
