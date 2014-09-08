@@ -207,7 +207,7 @@ public class RemoteRequest implements Runnable {
 
                 StatusLine status = response.getStatusLine();
                 if (Utils.isTransientError(status)) {
-                    Log.v(Log.TAG_SYNC, "%s: RemoteRequest got transient error %s for url: %s, going to retry", this, status, url);
+                    Log.v(Log.TAG_SYNC, "%s: RemoteRequest got transient error %s for url: %s, may retry", this, status, url);
                     continue;
                 }
 
