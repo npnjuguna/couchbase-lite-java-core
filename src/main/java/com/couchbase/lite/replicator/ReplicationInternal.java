@@ -194,32 +194,37 @@ abstract class ReplicationInternal {
      */
     protected void start() {
 
-        if (!db.isOpen()) {
+        try {
+            if (!db.isOpen()) {
 
-            String msg = String.format("Db: %s is not open, abort replication", db);
-            parentReplication.setLastError(new Exception(msg));
+                String msg = String.format("Db: %s is not open, abort replication", db);
+                parentReplication.setLastError(new Exception(msg));
 
-            fireTrigger(ReplicationTrigger.STOP_IMMEDIATE);
+                fireTrigger(ReplicationTrigger.STOP_IMMEDIATE);
 
-            return;
+                return;
 
+            }
+
+            db.addReplication(parentReplication);
+            db.addActiveReplication(parentReplication);
+
+            initSessionId();
+
+            // init batcher
+            initBatcher();
+
+            // init authorizer / authenticator
+            initAuthorizer();
+
+            // call goOnline (or trigger state change into online state)
+            goOnlineInitialStartup();
+
+            initNetworkReachabilityManager();
+
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "%s: Exception in start(): %s", this, e);
         }
-
-        db.addReplication(parentReplication);
-        db.addActiveReplication(parentReplication);
-
-        initSessionId();
-
-        // init batcher
-        initBatcher();
-
-        // init authorizer / authenticator
-        initAuthorizer();
-
-        // call goOnline (or trigger state change into online state)
-        goOnlineInitialStartup();
-
-        initNetworkReachabilityManager();
 
     }
 
@@ -302,7 +307,7 @@ abstract class ReplicationInternal {
     @InterfaceAudience.Private
     protected void checkSessionAtPath(final String sessionPath) {
 
-        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: checkSessionAtPath() calling asyncTaskStarted()", this, Thread.currentThread());
+        Log.d(Log.TAG_SYNC, "%s | %s: checkSessionAtPath() calling asyncTaskStarted()", this, Thread.currentThread());
 
         asyncTaskStarted();
         Future future = sendAsyncRequest("GET", sessionPath, null, new RemoteRequestCompletionBlock() {
@@ -325,6 +330,7 @@ abstract class ReplicationInternal {
 
                     } else {
                         Map<String, Object> response = (Map<String, Object>) result;
+                        Log.e(Log.TAG_SYNC, "%s checkSessionAtPath() response: %s", this, response);
                         Map<String, Object> userCtx = (Map<String, Object>) response.get("userCtx");
                         String username = (String) userCtx.get("name");
                         if (username != null && username.length() > 0) {
@@ -336,7 +342,10 @@ abstract class ReplicationInternal {
                         }
                     }
 
-                } finally {
+                } catch (Exception e) {
+                    Log.e(Log.TAG_SYNC, "%s Exception in checkSessionAtPath()", e, this);
+                }
+                finally {
                     Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: checkSessionAtPath() calling asyncTaskFinished()", this, Thread.currentThread());
 
                     asyncTaskFinished(1);
@@ -1109,7 +1118,7 @@ abstract class ReplicationInternal {
     }
 
     private void logTransition(Transition<ReplicationState, ReplicationTrigger> transition) {
-        Log.d(Log.TAG_SYNC, "%s -> %s (via %s)", transition.getSource(), transition.getDestination(), transition.getTrigger());
+        Log.d(Log.TAG_SYNC, "State transition: %s -> %s (via %s).  this: %s", transition.getSource(), transition.getDestination(), transition.getTrigger(), this);
     }
 
     private void notifyChangeListenersStateTransition(Transition<ReplicationState, ReplicationTrigger> transition) {

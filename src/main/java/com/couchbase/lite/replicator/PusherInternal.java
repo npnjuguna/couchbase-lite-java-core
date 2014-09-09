@@ -265,10 +265,14 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
         ChangesOptions options = new ChangesOptions();
         options.setIncludeConflicts(true);
+        Log.d(Log.TAG_SYNC, "%s: Getting changes since %d", this, lastSequence);
         RevisionList changes = db.changesSince(lastSequenceLong, options, filter);
         if(changes.size() > 0) {
+            Log.d(Log.TAG_SYNC, "%s: Queuing %d changes since %d", this, changes.size(), lastSequence);
             batcher.queueObjects(changes);
             batcher.flush();
+        } else {
+            Log.d(Log.TAG_SYNC, "%s: No changes since %d", this, lastSequence);
         }
 
         // Now listen for future changes (in continuous mode):
@@ -304,6 +308,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     }
 
     protected void goOnline() {
+
+        super.goOnline();
+
+        Log.d(Log.TAG_SYNC, "%s: goOnline() called, calling checkSession()", this);
         checkSession();
     }
 
@@ -637,7 +645,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             revisionFailed();
                         }
                     } else {
-                        Log.v(Log.TAG_SYNC, "Uploaded multipart request.");
+                        Log.v(Log.TAG_SYNC, "Uploaded multipart request.  Revision: %s", revision);
                         removePending(revision);
                     }
                 } finally {
