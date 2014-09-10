@@ -188,7 +188,7 @@ public class RemoteRequest implements Runnable {
                     Thread.sleep(RETRY_DELAY_MS);
                 }
 
-                Log.v(Log.TAG_SYNC, "%s: RemoteRequest executeRequest() called, url: %s", this, url);
+                Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling httpClient.execute, url: %s", this, url);
 
                 if (request.isAborted()) {
                     Log.v(Log.TAG_SYNC, "%s: RemoteRequest has already been aborted", this);
@@ -197,6 +197,8 @@ public class RemoteRequest implements Runnable {
                 }
 
                 response = httpClient.execute(request);
+
+                Log.v(Log.TAG_SYNC, "%s: RemoteRequest called httpClient.execute, url: %s", this, url);
 
                 // add in cookies to global store
                 try {
@@ -256,7 +258,7 @@ public class RemoteRequest implements Runnable {
         }
 
 
-        Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  error: %s", this, error);
+        Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  url: %s, error: %s", this, url, error);
         respondWithResult(fullBody, error, response);
 
     }
