@@ -38,9 +38,12 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 
 
+/**
+ * @exclude
+ */
 public class RemoteRequest implements Runnable {
 
-    private static final int MAX_RETRIES = 2;
+    public static final int MAX_RETRIES = 2;
     private static final int RETRY_DELAY_MS = 10 * 1000;
 
     protected ScheduledExecutorService workExecutor;
