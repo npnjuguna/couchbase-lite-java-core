@@ -265,14 +265,14 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
         ChangesOptions options = new ChangesOptions();
         options.setIncludeConflicts(true);
-        Log.d(Log.TAG_SYNC, "%s: Getting changes since %d", this, lastSequence);
+        Log.d(Log.TAG_SYNC, "%s: Getting changes since %s", this, lastSequence);
         RevisionList changes = db.changesSince(lastSequenceLong, options, filter);
         if(changes.size() > 0) {
-            Log.d(Log.TAG_SYNC, "%s: Queuing %d changes since %d", this, changes.size(), lastSequence);
+            Log.d(Log.TAG_SYNC, "%s: Queuing %d changes since %s", this, changes.size(), lastSequence);
             batcher.queueObjects(changes);
             batcher.flush();
         } else {
-            Log.d(Log.TAG_SYNC, "%s: No changes since %d", this, lastSequence);
+            Log.d(Log.TAG_SYNC, "%s: No changes since %s", this, lastSequence);
         }
 
         // Now listen for future changes (in continuous mode):

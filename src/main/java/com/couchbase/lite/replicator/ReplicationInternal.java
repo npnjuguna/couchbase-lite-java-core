@@ -223,7 +223,7 @@ abstract class ReplicationInternal {
             initNetworkReachabilityManager();
 
         } catch (Exception e) {
-            Log.e(Log.TAG_SYNC, "%s: Exception in start(): %s", this, e);
+            Log.e(Log.TAG_SYNC, "%s: Exception in start()", e, this);
         }
 
     }
@@ -343,7 +343,7 @@ abstract class ReplicationInternal {
                     }
 
                 } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "%s Exception in checkSessionAtPath()", e, this);
+                    Log.e(Log.TAG_SYNC, "%s Exception in checkSessionAtPath()", this, e);
                 }
                 finally {
                     Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: checkSessionAtPath() calling asyncTaskFinished()", this, Thread.currentThread());
