@@ -536,33 +536,6 @@ abstract class ReplicationInternal {
         Future future = remoteRequestExecutor.submit(request);
         return future;
 
-        /*final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getLocalDatabase(), getHeaders(), onCompletion);
-
-        request.setAuthenticator(getAuthenticator());
-
-        request.setOnPreCompletion(new RemoteRequestCompletionBlock() {
-            @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
-                if (serverType == null) {
-                    Header serverHeader = httpResponse.getFirstHeader("Server");
-                    if (serverHeader != null) {
-                        String serverVersion = serverHeader.getValue();
-                        Log.v(Log.TAG_SYNC, "serverVersion: %s", serverVersion);
-                        serverType = serverVersion;
-                    }
-                }
-            }
-        });
-
-
-        if (remoteRequestExecutor.isTerminated()) {
-            String msg = "sendAsyncRequest called, but remoteRequestExecutor has been terminated";
-            throw new IllegalStateException(msg);
-        }
-        Future future = remoteRequestExecutor.submit(request);
-        return future;
-        */
-
     }
 
     /**
