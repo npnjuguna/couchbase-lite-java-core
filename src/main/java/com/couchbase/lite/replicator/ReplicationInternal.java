@@ -66,6 +66,8 @@ abstract class ReplicationInternal {
 
     public static final String REPLICATOR_DATABASE_NAME = "_replicator";
 
+    public static final int EXECUTOR_THREAD_POOL_SIZE = 5;
+
     private static int lastSessionID = 0;
 
     protected Replication parentReplication;
@@ -82,7 +84,6 @@ abstract class ReplicationInternal {
     protected Batcher<RevisionInternal> batcher;
     protected static final int PROCESSOR_DELAY = 500;
     protected static final int INBOX_CAPACITY = 100;
-    protected static final int EXECUTOR_THREAD_POOL_SIZE = 5;
     protected ExecutorService remoteRequestExecutor;
     protected int asyncTaskCount;
     protected Throwable error;
@@ -313,7 +314,7 @@ abstract class ReplicationInternal {
         Future future = sendAsyncRequest("GET", sessionPath, null, new RemoteRequestCompletionBlock() {
 
             @Override
-            public void onCompletion(Object result, Throwable error) {
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable error) {
 
                 try {
                     if (error != null) {
@@ -375,7 +376,7 @@ abstract class ReplicationInternal {
         Future future = sendAsyncRequest("POST", loginPath, loginParameters, new RemoteRequestCompletionBlock() {
 
             @Override
-            public void onCompletion(Object result, Throwable e) {
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                 try {
                     if (e != null) {
                         Log.d(Log.TAG_SYNC, "%s: Login failed for path: %s", this, loginPath);
@@ -510,10 +511,9 @@ abstract class ReplicationInternal {
 
         request.setOnPreCompletion(new RemoteRequestCompletionBlock() {
             @Override
-            public void onCompletion(Object result, Throwable e) {
-                if (serverType == null && result instanceof HttpResponse) {
-                    HttpResponse response = (HttpResponse) result;
-                    Header serverHeader = response.getFirstHeader("Server");
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+                if (serverType == null) {
+                    Header serverHeader = httpResponse.getFirstHeader("Server");
                     if (serverHeader != null) {
                         String serverVersion = serverHeader.getValue();
                         Log.v(Log.TAG_SYNC, "serverVersion: %s", serverVersion);
@@ -656,7 +656,7 @@ abstract class ReplicationInternal {
         Future future = sendAsyncRequest("PUT", "/_local/" + checkpointID, body, new RemoteRequestCompletionBlock() {
 
             @Override
-            public void onCompletion(Object result, Throwable e) {
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
 
                 Log.d(Log.TAG_SYNC, "%s: put remote _local document request finished.  checkpointID: %s body: %s", this, checkpointID, body);
 
@@ -722,7 +722,7 @@ abstract class ReplicationInternal {
         Future future = sendAsyncRequest("GET", "/_local/" + remoteCheckpointDocID(), null, new RemoteRequestCompletionBlock() {
 
             @Override
-            public void onCompletion(Object result, Throwable e) {
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                 try {
                     if (db == null) {
                         Log.w(Log.TAG_SYNC, "%s: db == null while refreshing remote checkpoint.  aborting", this);
@@ -775,7 +775,7 @@ abstract class ReplicationInternal {
         Future future = sendAsyncRequest("GET", "/_local/" + checkpointId, null, new RemoteRequestCompletionBlock() {
 
             @Override
-            public void onCompletion(Object result, Throwable e) {
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                 try {
 
                     if (e != null && !Utils.is404(e)) {

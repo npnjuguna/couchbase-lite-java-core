@@ -18,6 +18,7 @@ import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
 
+import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
 
@@ -318,7 +319,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     },
                     new RemoteRequestCompletionBlock() {
 
-                        public void onCompletion(Object result, Throwable e) {
+                        public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                             // The entire _bulk_get is finished:
                             if (e != null) {
                                 setError(e);
@@ -421,7 +422,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 body,
                 new RemoteRequestCompletionBlock() {
 
-                    public void onCompletion(Object result, Throwable e) {
+                    public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
 
                         Map<String, Object> res = (Map<String, Object>) result;
 
@@ -612,7 +613,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         Future future = sendAsyncMultipartDownloaderRequest("GET", pathInside, null, db, new RemoteRequestCompletionBlock() {
 
             @Override
-            public void onCompletion(Object result, Throwable e) {
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                 try {
                     if (e != null) {
                         Log.e(Log.TAG_SYNC, "Error pulling remote revision", e);

@@ -31,11 +31,17 @@ import org.apache.http.impl.auth.BasicScheme;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.protocol.HttpContext;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -43,8 +49,8 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 public class RemoteRequest implements Runnable {
 
-    public static final int MAX_RETRIES = 2;
-    private static final int RETRY_DELAY_MS = 10 * 1000;
+    public static final int MAX_RETRIES = 50;
+    private static final int RETRY_DELAY_MS = 2 * 1000;  // TODO!!!! set back to 10 before committing
 
     protected ScheduledExecutorService workExecutor;
     protected final HttpClientFactory clientFactory;
@@ -99,7 +105,7 @@ public class RemoteRequest implements Runnable {
 
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() finished, url: %s", this, url);
 
-        } catch (Exception e) {
+        } catch (Throwable e) {
             Log.e(Log.TAG_SYNC, "RemoteRequest.run() exception: %s", e);
         }
 
@@ -107,6 +113,7 @@ public class RemoteRequest implements Runnable {
     }
 
     public void abort() {
+        Log.w(Log.TAG_REMOTE_REQUEST, "%s: aborting request: %s", this, request);
         if (request != null) {
             request.abort();
         } else {
@@ -168,94 +175,85 @@ public class RemoteRequest implements Runnable {
         this.authenticator = authenticator;
     }
 
-    protected void executeRequest(HttpClient httpClient, HttpUriRequest request) {
+    protected void executeRequest(HttpClient httpClient, HttpUriRequest requestParam) {
 
         Object fullBody = null;
         Throwable error = null;
         HttpResponse response = null;
         retryCount = 0;
 
-        while (retryCount <= MAX_RETRIES) {
+        try {
 
-            try {
+            fullBody = null;
+            error = null;
+            response = null;
 
-                fullBody = null;
-                error = null;
-                response = null;
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling httpClient.execute, url: %s", this, url);
 
-                if (retryCount > 0) {
-                    Log.v(Log.TAG_SYNC, "%s: RemoteRequest executeRequest() sleeping %d ms, url: %s", this, RETRY_DELAY_MS, url);
-                    Thread.sleep(RETRY_DELAY_MS);
-                }
-
-                Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling httpClient.execute, url: %s", this, url);
-
-                if (request.isAborted()) {
-                    Log.v(Log.TAG_SYNC, "%s: RemoteRequest has already been aborted", this);
-                    respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, request)), response);
-                    return;
-                }
-
-                response = httpClient.execute(request);
-
-                Log.v(Log.TAG_SYNC, "%s: RemoteRequest called httpClient.execute, url: %s", this, url);
-
-                // add in cookies to global store
-                try {
-                    if (httpClient instanceof DefaultHttpClient) {
-                        DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
-                        this.clientFactory.addCookies(defaultHttpClient.getCookieStore().getCookies());
-                    }
-                } catch (Exception e) {
-                    Log.e(Log.TAG_REMOTE_REQUEST, "Unable to add in cookies to global store", e);
-                }
-
-                StatusLine status = response.getStatusLine();
-                if (Utils.isTransientError(status)) {
-                    Log.v(Log.TAG_SYNC, "%s: RemoteRequest got transient error %s for url: %s, may retry", this, status, url);
-                    // set the error even though we may retry.  if we retry, it will be cleared.
-                    error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
-                    continue;
-                }
-
-                if (status.getStatusCode() >= 300) {
-                    Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
-                    error = new HttpResponseException(status.getStatusCode(),
-                            status.getReasonPhrase());
-                    break;
-                } else {
-                    HttpEntity temp = response.getEntity();
-                    if (temp != null) {
-                        InputStream stream = null;
-                        try {
-                            stream = temp.getContent();
-                            fullBody = Manager.getObjectMapper().readValue(stream,
-                                    Object.class);
-                        } finally {
-                            try {
-                                stream.close();
-                            } catch (IOException e) {
-                            }
-                        }
-                    }
-                    break;
-                }
-            } catch (InterruptedException e) {
-                Log.e(Log.TAG_REMOTE_REQUEST, "interrupted exception", e);
-            } catch (IOException e) {
-                Log.e(Log.TAG_REMOTE_REQUEST, "io exception.  url: %s", e, url);
-                error = e;
-                // Treat all IOExceptions as transient, per:
-                // http://hc.apache.org/httpclient-3.x/exception-handling.html
-            } catch (IllegalStateException e) {
-                Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
-                error = e;
-                break;
-            } finally {
-                retryCount += 1;
+            if (this.request.isAborted()) {
+                Log.v(Log.TAG_SYNC, "%s: RemoteRequest has already been aborted", this);
+                respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, this.request)), response);
+                return;
             }
 
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling httpClient.execute, client: %s url: %s", this, httpClient, url);
+
+            response = httpClient.execute(this.request);
+
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest called httpClient.execute, url: %s", this, url);
+
+            // add in cookies to global store
+            try {
+                if (httpClient instanceof DefaultHttpClient) {
+                    DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
+                    this.clientFactory.addCookies(defaultHttpClient.getCookieStore().getCookies());
+                }
+            } catch (Exception e) {
+                Log.e(Log.TAG_REMOTE_REQUEST, "Unable to add in cookies to global store", e);
+            }
+
+            StatusLine status = response.getStatusLine();
+
+
+            if (status.getStatusCode() >= 300) {
+                Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
+                error = new HttpResponseException(status.getStatusCode(),
+                        status.getReasonPhrase());
+                respondWithResult(fullBody, error, response);
+                return;
+            } else {
+                HttpEntity temp = response.getEntity();
+                if (temp != null) {
+                    InputStream stream = null;
+                    try {
+                        stream = temp.getContent();
+                        fullBody = Manager.getObjectMapper().readValue(stream,
+                                Object.class);
+                    } finally {
+                        try {
+                            stream.close();
+                        } catch (IOException e) {
+                        }
+                    }
+                }
+            }
+        } catch (IOException e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "io exception.  url: %s", e, url);
+            error = e;
+            // Treat all IOExceptions as transient, per:
+            // http://hc.apache.org/httpclient-3.x/exception-handling.html
+        } catch (IllegalStateException e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
+            error = e;
+        } catch (Exception e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
+            error = e;
         }
+        finally {
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest finally block.  url: %s", this, url);
+        }
+
+
 
 
         Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  url: %s, error: %s", this, url, error);
@@ -305,13 +303,15 @@ public class RemoteRequest implements Runnable {
 
     public void respondWithResult(final Object result, final Throwable error, final HttpResponse response) {
 
+        // TODO: this work should happen on workExecutor
+
         try {
             if (onPreCompletion != null) {
-                onPreCompletion.onCompletion(response, error);
+                onPreCompletion.onCompletion(response, null, error);
             }
-            onCompletion.onCompletion(result, error);
+            onCompletion.onCompletion(response, result, error);
             if (onPostCompletion != null) {
-                onPostCompletion.onCompletion(response, error);
+                onPostCompletion.onCompletion(response, null, error);
             }
         } catch (Exception e) {
             // don't let this crash the thread

@@ -17,6 +17,7 @@ import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
 
+import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.entity.mime.MultipartEntity;
 import org.apache.http.entity.mime.content.FileBody;
@@ -207,7 +208,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         Future future = sendAsyncRequest("PUT", "", null, new RemoteRequestCompletionBlock() {
 
             @Override
-            public void onCompletion(Object result, Throwable e) {
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                 try {
                     creatingTarget = false;
                     if(e != null && e instanceof HttpResponseException && ((HttpResponseException)e).getStatusCode() != 412) {
@@ -362,7 +363,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         Future future = sendAsyncRequest("POST", "/_revs_diff", diffs, new RemoteRequestCompletionBlock() {
 
             @Override
-            public void onCompletion(Object response, Throwable e) {
+            public void onCompletion(HttpResponse httpResponse, Object response, Throwable e) {
 
                 try {
                     Log.v(Log.TAG_SYNC, "%s: got /_revs_diff response", this);
@@ -498,7 +499,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         Future future = sendAsyncRequest("POST", "/_bulk_docs", bulkDocsBody, new RemoteRequestCompletionBlock() {
 
             @Override
-            public void onCompletion(Object result, Throwable e) {
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                 try {
                     if (e == null) {
                         Set<String> failedIDs = new HashSet<String>();
@@ -629,7 +630,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         asyncTaskStarted();
         Future future = sendAsyncMultipartRequest("PUT", path, multiPart, new RemoteRequestCompletionBlock() {
             @Override
-            public void onCompletion(Object result, Throwable e) {
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                 try {
                     if(e != null) {
                         if(e instanceof HttpResponseException) {
@@ -682,7 +683,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 path,
                 rev.getProperties(),
                 new RemoteRequestCompletionBlock() {
-                    public void onCompletion(Object result, Throwable e) {
+                    public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                         if (e != null) {
                             setError(e);
                             revisionFailed();
