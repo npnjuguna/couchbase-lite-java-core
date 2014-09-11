@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class RemoteRequestRetry implements Runnable {
 
-    public static int MAX_RETRIES = 2;
+    public static int MAX_RETRIES = 3;  // TODO: rename to MAX_ATTEMPTS
     public static int RETRY_DELAY_MS = 10 * 1000;
 
     protected ScheduledExecutorService workExecutor;
@@ -36,7 +36,9 @@ public class RemoteRequestRetry implements Runnable {
     protected URL url;
     protected Object body;
     protected Authenticator authenticator;
-    protected final RemoteRequestCompletionBlock onCompletionCaller;
+    protected RemoteRequestCompletionBlock onCompletionCaller;
+    protected RemoteRequestCompletionBlock onPreCompletionCaller;
+
     private int retryCount;
     private Database db;
     protected HttpUriRequest request;
@@ -81,7 +83,7 @@ public class RemoteRequestRetry implements Runnable {
 
             Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry run() started, url: %s", this, url);
 
-            while (retryCount <= MAX_RETRIES) {
+            while (retryCount < MAX_RETRIES) {
 
                 requestHttpResponse = null;
                 requestResult = null;
@@ -97,6 +99,13 @@ public class RemoteRequestRetry implements Runnable {
                         requestHeaders,
                         onCompletionInner
                 );
+
+                if (this.authenticator != null) {
+                    request.setAuthenticator(this.authenticator);
+                }
+                if (this.onPreCompletionCaller != null) {
+                    request.setOnPreCompletion(this.onPreCompletionCaller);
+                }
 
                 // wait for the future to return
 
@@ -183,5 +192,14 @@ public class RemoteRequestRetry implements Runnable {
         }
     };
 
+    /**
+     *  Set Authenticator for BASIC Authentication
+     */
+    public void setAuthenticator(Authenticator authenticator) {
+        this.authenticator = authenticator;
+    }
 
+    public void setOnPreCompletionCaller(RemoteRequestCompletionBlock onPreCompletionCaller) {
+        this.onPreCompletionCaller = onPreCompletionCaller;
+    }
 }

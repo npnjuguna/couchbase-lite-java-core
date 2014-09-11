@@ -15,6 +15,7 @@ import com.couchbase.lite.support.RemoteMultipartDownloaderRequest;
 import com.couchbase.lite.support.RemoteMultipartRequest;
 import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
+import com.couchbase.lite.support.RemoteRequestRetry;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
@@ -505,7 +506,37 @@ abstract class ReplicationInternal {
     @InterfaceAudience.Private
     public Future sendAsyncRequest(String method, URL url, Object body, final RemoteRequestCompletionBlock onCompletion) {
 
-        final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getLocalDatabase(), getHeaders(), onCompletion);
+        RemoteRequestRetry request = new RemoteRequestRetry(
+                remoteRequestExecutor,
+                workExecutor,
+                clientFactory,
+                method,
+                url,
+                body,
+                getLocalDatabase(),
+                getHeaders(),
+                onCompletion
+        );
+
+        request.setAuthenticator(getAuthenticator());
+        request.setOnPreCompletionCaller(new RemoteRequestCompletionBlock() {
+            @Override
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+                if (serverType == null) {
+                    Header serverHeader = httpResponse.getFirstHeader("Server");
+                    if (serverHeader != null) {
+                        String serverVersion = serverHeader.getValue();
+                        Log.v(Log.TAG_SYNC, "serverVersion: %s", serverVersion);
+                        serverType = serverVersion;
+                    }
+                }
+            }
+        });
+
+        Future future = remoteRequestExecutor.submit(request);
+        return future;
+
+        /*final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getLocalDatabase(), getHeaders(), onCompletion);
 
         request.setAuthenticator(getAuthenticator());
 
@@ -530,6 +561,7 @@ abstract class ReplicationInternal {
         }
         Future future = remoteRequestExecutor.submit(request);
         return future;
+        */
 
     }
 

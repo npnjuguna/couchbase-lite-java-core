@@ -49,9 +49,6 @@ import java.util.concurrent.TimeUnit;
  */
 public class RemoteRequest implements Runnable {
 
-    public static final int MAX_RETRIES = 50;
-    private static final int RETRY_DELAY_MS = 2 * 1000;  // TODO!!!! set back to 10 before committing
-
     protected ScheduledExecutorService workExecutor;
     protected final HttpClientFactory clientFactory;
     protected String method;
