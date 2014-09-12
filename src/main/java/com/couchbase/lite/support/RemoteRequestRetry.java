@@ -8,6 +8,7 @@ import com.couchbase.lite.util.Utils;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpUriRequest;
 
+import java.io.IOException;
 import java.net.URL;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -170,7 +171,7 @@ public class RemoteRequestRetry implements Runnable {
 
             } else {
 
-                if (Utils.isTransientError(httpResponse.getStatusLine())) {
+                if (isTransientError(httpResponse, e)) {
                     if (retryCount == MAX_RETRIES) {
                         Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, but transient error.  retrying. url: %s", this, url);
                         // ok, we're out of retries, propagate completion block call
@@ -179,18 +180,44 @@ public class RemoteRequestRetry implements Runnable {
                         // we're going to try again, so don't call the original caller's
                         // completion block yet.  Eventually it will get called though
                         Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, but transient error.  NOT retrying. url: %s", this, url);
-
+                        requestHttpResponse = httpResponse;
+                        requestResult = result;
+                        requestThrowable = e;
                     }
-
                 } else {
                     Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, non-transient error.  NOT retrying. url: %s", this, url);
                     // this isn't a transient error, so there's no point in retrying
                     completed(httpResponse, result, e);
                 }
 
+
             }
         }
     };
+
+    private boolean isTransientError(HttpResponse httpResponse, Throwable e) {
+
+        Log.d(Log.TAG_SYNC, "%s: isTransientError called, httpResponse: %s e: %s", this, httpResponse, e);
+
+        if (httpResponse != null) {
+
+            if (Utils.isTransientError(httpResponse.getStatusLine())) {
+                Log.d(Log.TAG_SYNC, "%s: its a transient error, return true");
+                return true;
+            }
+
+        } else {
+            if (e instanceof IOException) {
+                Log.d(Log.TAG_SYNC, "%s: its an ioexception, return true");
+                return true;
+            }
+
+        }
+
+        Log.d(Log.TAG_SYNC, "%s: return false");
+        return false;
+
+    }
 
     /**
      *  Set Authenticator for BASIC Authentication
