@@ -309,9 +309,6 @@ abstract class ReplicationInternal {
     @InterfaceAudience.Private
     protected void checkSessionAtPath(final String sessionPath) {
 
-        Log.d(Log.TAG_SYNC, "%s | %s: checkSessionAtPath() calling asyncTaskStarted()", this, Thread.currentThread());
-
-        asyncTaskStarted();
         Future future = sendAsyncRequest("GET", sessionPath, null, new RemoteRequestCompletionBlock() {
 
             @Override
@@ -347,11 +344,7 @@ abstract class ReplicationInternal {
                 } catch (Exception e) {
                     Log.e(Log.TAG_SYNC, "%s Exception in checkSessionAtPath()", this, e);
                 }
-                finally {
-                    Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: checkSessionAtPath() calling asyncTaskFinished()", this, Thread.currentThread());
 
-                    asyncTaskFinished(1);
-                }
             }
 
         });
@@ -371,33 +364,24 @@ abstract class ReplicationInternal {
 
         Log.d(Log.TAG_SYNC, "%s: Doing login with %s at %s", this, getAuthenticator().getClass(), loginPath);
 
-        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: login() calling asyncTaskStarted()", this, Thread.currentThread());
-
-        asyncTaskStarted();
         Future future = sendAsyncRequest("POST", loginPath, loginParameters, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
-                try {
-                    if (e != null) {
-                        Log.d(Log.TAG_SYNC, "%s: Login failed for path: %s", this, loginPath);
-                        setError(e);
+                if (e != null) {
+                    Log.d(Log.TAG_SYNC, "%s: Login failed for path: %s", this, loginPath);
+                    setError(e);
 
-                        // TODO: double check this behavior against iOS implementation, especially
-                        // TODO: with regards to behavior of a continuous replication.
-                        // Note: was added in order that unit test testReplicatorErrorStatus() finished and passed.
-                        // (before adding this, the replication would just end up in limbo and never finish)
-                        triggerStop();
+                    // TODO: double check this behavior against iOS implementation, especially
+                    // TODO: with regards to behavior of a continuous replication.
+                    // Note: was added in order that unit test testReplicatorErrorStatus() finished and passed.
+                    // (before adding this, the replication would just end up in limbo and never finish)
+                    triggerStop();
 
-                    }
-                    else {
-                        Log.v(Log.TAG_SYNC, "%s: Successfully logged in!", this);
-                        fetchRemoteCheckpointDoc();
-                    }
-                } finally {
-                    Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: login() calling asyncTaskFinished()", this, Thread.currentThread());
-
-                    asyncTaskFinished(1);
+                }
+                else {
+                    Log.v(Log.TAG_SYNC, "%s: Successfully logged in!", this);
+                    fetchRemoteCheckpointDoc();
                 }
             }
 
@@ -426,31 +410,6 @@ abstract class ReplicationInternal {
 
     }
 
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    public synchronized void asyncTaskStarted() {
-        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s: asyncTaskStarted %d -> %d", this, this.asyncTaskCount, this.asyncTaskCount + 1);
-        if (asyncTaskCount++ == 0) {
-            Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s: asyncTaskStarted() calling updateActive()", this);
-            updateActive();
-        }
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    public synchronized void asyncTaskFinished(int numTasks) {
-        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s: asyncTaskFinished %d -> %d", this, this.asyncTaskCount, this.asyncTaskCount - numTasks);
-        this.asyncTaskCount -= numTasks;
-        assert(asyncTaskCount >= 0);
-        if (asyncTaskCount == 0) {
-            Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s: asyncTaskFinished() calling updateActive()", this);
-            updateActive();
-        }
-    }
 
     @InterfaceAudience.Private
     /* package */ void addToCompletedChangesCount(int delta) {
@@ -722,28 +681,20 @@ abstract class ReplicationInternal {
     @InterfaceAudience.Private
     private void refreshRemoteCheckpointDoc() {
         Log.d(Log.TAG_SYNC, "%s: Refreshing remote checkpoint to get its _rev...", this);
-        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: refreshRemoteCheckpointDoc() calling asyncTaskStarted()", this, Thread.currentThread());
-        asyncTaskStarted();
         Future future = sendAsyncRequest("GET", "/_local/" + remoteCheckpointDocID(), null, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
-                try {
-                    if (db == null) {
-                        Log.w(Log.TAG_SYNC, "%s: db == null while refreshing remote checkpoint.  aborting", this);
-                        return;
-                    }
-                    if (e != null && Utils.getStatusFromError(e) != Status.NOT_FOUND) {
-                        Log.e(Log.TAG_SYNC, "%s: Error refreshing remote checkpoint", e, this);
-                    } else {
-                        Log.d(Log.TAG_SYNC, "%s: Refreshed remote checkpoint: %s", this, result);
-                        remoteCheckpoint = (Map<String, Object>) result;
-                        saveLastSequence();  // try saving again
-                    }
-                } finally {
-                    Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: refreshRemoteCheckpointDoc() calling asyncTaskFinished()", this, Thread.currentThread());
-
-                    asyncTaskFinished(1);
+                if (db == null) {
+                    Log.w(Log.TAG_SYNC, "%s: db == null while refreshing remote checkpoint.  aborting", this);
+                    return;
+                }
+                if (e != null && Utils.getStatusFromError(e) != Status.NOT_FOUND) {
+                    Log.e(Log.TAG_SYNC, "%s: Error refreshing remote checkpoint", e, this);
+                } else {
+                    Log.d(Log.TAG_SYNC, "%s: Refreshed remote checkpoint: %s", this, result);
+                    remoteCheckpoint = (Map<String, Object>) result;
+                    saveLastSequence();  // try saving again
                 }
             }
         });
@@ -774,49 +725,39 @@ abstract class ReplicationInternal {
         String checkpointId = remoteCheckpointDocID();
         final String localLastSequence = db.lastSequenceWithCheckpointId(checkpointId);
 
-        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: fetchRemoteCheckpointDoc() calling asyncTaskStarted()", this, Thread.currentThread());
-
-        asyncTaskStarted();
         Future future = sendAsyncRequest("GET", "/_local/" + checkpointId, null, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
-                try {
+            if (e != null && !Utils.is404(e)) {
+                Log.w(Log.TAG_SYNC, "%s: error getting remote checkpoint", e, this);
+                setError(e);
 
-                    if (e != null && !Utils.is404(e)) {
-                        Log.w(Log.TAG_SYNC, "%s: error getting remote checkpoint", e, this);
-                        setError(e);
+                // TODO: double check this behavior against iOS implementation, especially
+                // TODO: with regards to behavior of a continuous replication.
+                // Note: was added in order that unit test testRunReplicationWithError() finished and passed.
+                // (before adding this, the replication would just end up in limbo and never finish)
+                fireTrigger(ReplicationTrigger.STOP_GRACEFUL);  // TODO: call triggerStop(); just to be more consistent
 
-                        // TODO: double check this behavior against iOS implementation, especially
-                        // TODO: with regards to behavior of a continuous replication.
-                        // Note: was added in order that unit test testRunReplicationWithError() finished and passed.
-                        // (before adding this, the replication would just end up in limbo and never finish)
-                        fireTrigger(ReplicationTrigger.STOP_GRACEFUL);  // TODO: call triggerStop(); just to be more consistent
-
-                    } else {
-                        if (e != null && Utils.is404(e)) {
-                            Log.d(Log.TAG_SYNC, "%s: 404 error getting remote checkpoint %s, calling maybeCreateRemoteDB", this, remoteCheckpointDocID());
-                            maybeCreateRemoteDB();
-                        }
-                        Map<String, Object> response = (Map<String, Object>) result;
-                        remoteCheckpoint = response;
-                        String remoteLastSequence = null;
-                        if (response != null) {
-                            remoteLastSequence = (String) response.get("lastSequence");
-                        }
-                        if (remoteLastSequence != null && remoteLastSequence.equals(localLastSequence)) {
-                            lastSequence = localLastSequence;
-                            Log.d(Log.TAG_SYNC, "%s: Replicating from lastSequence=%s", this, lastSequence);
-                        } else {
-                            Log.d(Log.TAG_SYNC, "%s: lastSequence mismatch: I had: %s, remote had: %s", this, localLastSequence, remoteLastSequence);
-                        }
-                        beginReplicating();
-                    }
-                } finally {
-                    Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: fetchRemoteCheckpointDoc() calling asyncTaskFinished()", this, Thread.currentThread());
-
-                    asyncTaskFinished(1);
+            } else {
+                if (e != null && Utils.is404(e)) {
+                    Log.d(Log.TAG_SYNC, "%s: 404 error getting remote checkpoint %s, calling maybeCreateRemoteDB", this, remoteCheckpointDocID());
+                    maybeCreateRemoteDB();
                 }
+                Map<String, Object> response = (Map<String, Object>) result;
+                remoteCheckpoint = response;
+                String remoteLastSequence = null;
+                if (response != null) {
+                    remoteLastSequence = (String) response.get("lastSequence");
+                }
+                if (remoteLastSequence != null && remoteLastSequence.equals(localLastSequence)) {
+                    lastSequence = localLastSequence;
+                    Log.d(Log.TAG_SYNC, "%s: Replicating from lastSequence=%s", this, lastSequence);
+                } else {
+                    Log.d(Log.TAG_SYNC, "%s: lastSequence mismatch: I had: %s, remote had: %s", this, localLastSequence, remoteLastSequence);
+                }
+                beginReplicating();
+            }
             }
 
         });

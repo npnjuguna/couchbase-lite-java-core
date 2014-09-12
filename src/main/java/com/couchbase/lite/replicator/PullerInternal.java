@@ -277,8 +277,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         Log.v(Log.TAG_SYNC, "%s: POST _bulk_get", this);
         final List<RevisionInternal> remainingRevs = new ArrayList<RevisionInternal>(bulkRevs);
-        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: pullBulkRevisions() calling asyncTaskStarted()", this, Thread.currentThread());
-        asyncTaskStarted();
+
         ++httpConnectionCount;
 
         final BulkDownloader dl;
@@ -328,10 +327,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                                 revisionFailed();
                                 completedChangesCount.addAndGet(remainingRevs.size());
                             }
-                            // Note that we've finished this task:
-                            Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: pullBulkRevisions.RemoteRequestCompletionBlock() calling asyncTaskFinished()", this, Thread.currentThread());
 
-                            asyncTaskFinished(1);
                             --httpConnectionCount;
                             // Start another task if there are still revisions waiting to be pulled:
                             pullRemoteRevisions();
@@ -388,9 +384,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
 
         //TODO: rev.getBody().compact();
-        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: queueDownloadedRevision() calling asyncTaskStarted()", this, Thread.currentThread());
 
-        asyncTaskStarted();
         downloadsToInsert.queueObject(rev);
 
     }
@@ -403,8 +397,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     protected void pullBulkWithAllDocs(final List<RevisionInternal> bulkRevs) {
         // http://wiki.apache.org/couchdb/HTTP_Bulk_Document_API
-        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: pullBulkWithAllDocs() calling asyncTaskStarted()", this, Thread.currentThread());
-        asyncTaskStarted();
+
         ++httpConnectionCount;
         final RevisionList remainingRevs = new RevisionList(bulkRevs);
 
@@ -470,10 +463,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             pullRemoteRevisions();
                         }
 
-                        // Note that we've finished this task:
-                        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: pullBulkWithAllDocs() calling asyncTaskFinished()", this, Thread.currentThread());
-
-                        asyncTaskFinished(1);
                         --httpConnectionCount;
                         // Start another task if there are still revisions waiting to be pulled:
                         pullRemoteRevisions();
@@ -549,9 +538,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
             }
 
-            Log.d(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: insertDownloads() calling asyncTaskFinished() with value: %d", this, Thread.currentThread(), downloads.size());
-
-            asyncTaskFinished(downloads.size());
         }
 
 
@@ -587,9 +573,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision with rev: %s", this, rev);
 
-        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: pullRemoteRevision() calling asyncTaskStarted()", this, Thread.currentThread());
-
-        asyncTaskStarted();
         ++httpConnectionCount;
 
         // Construct a query. We want the revision history, and the bodies of attachments that have
@@ -599,8 +582,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         List<String> knownRevs = knownCurrentRevIDs(rev);
         if (knownRevs == null) {
             Log.w(Log.TAG_SYNC, "knownRevs == null, something is wrong, possibly the replicator has shut down");
-            Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: pullRemoteRevision() calling asyncTaskFinished()", this, Thread.currentThread());
-            asyncTaskFinished(1);
             --httpConnectionCount;
             return;
         }
@@ -616,26 +597,18 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
-                try {
-                    if (e != null) {
-                        Log.e(Log.TAG_SYNC, "Error pulling remote revision", e);
-                        revisionFailed(rev, e);
-                    } else {
-                        Map<String, Object> properties = (Map<String, Object>) result;
-                        PulledRevision gotRev = new PulledRevision(properties, db);
-                        gotRev.setSequence(rev.getSequence());
-                        // Add to batcher ... eventually it will be fed to -insertDownloads:.
-                        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: pullRemoteRevision.sendAsyncMultipartDownloaderRequest() calling asyncTaskStarted()", this, Thread.currentThread());
+                if (e != null) {
+                    Log.e(Log.TAG_SYNC, "Error pulling remote revision", e);
+                    revisionFailed(rev, e);
+                } else {
+                    Map<String, Object> properties = (Map<String, Object>) result;
+                    PulledRevision gotRev = new PulledRevision(properties, db);
+                    gotRev.setSequence(rev.getSequence());
+                    // Add to batcher ... eventually it will be fed to -insertDownloads:.
 
-                        asyncTaskStarted();
-                        // TODO: [gotRev.body compact];
-                        Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision add rev: %s to batcher: %s", PullerInternal.this, gotRev, downloadsToInsert);
-                        downloadsToInsert.queueObject(gotRev);
-                    }
-                } finally {
-                    Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: pullRemoteRevision.sendAsyncMultipartDownloaderRequest() calling asyncTaskFinished()", this, Thread.currentThread());
-
-                    asyncTaskFinished(1);
+                    // TODO: [gotRev.body compact];
+                    Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision add rev: %s to batcher: %s", PullerInternal.this, gotRev, downloadsToInsert);
+                    downloadsToInsert.queueObject(gotRev);
                 }
 
                 // Note that we've finished this task; then start another one if there

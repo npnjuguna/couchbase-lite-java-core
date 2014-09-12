@@ -298,8 +298,6 @@ public class RemoteRequest implements Runnable {
 
     public void respondWithResult(final Object result, final Throwable error, final HttpResponse response) {
 
-        // TODO: this work should happen on workExecutor
-
         try {
             if (onPreCompletion != null) {
                 onPreCompletion.onCompletion(response, null, error);
