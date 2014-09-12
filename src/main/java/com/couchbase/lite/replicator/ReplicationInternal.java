@@ -84,7 +84,7 @@ abstract class ReplicationInternal {
     private String serverType;
     protected Batcher<RevisionInternal> batcher;
     protected static final int PROCESSOR_DELAY = 500;
-    protected static final int INBOX_CAPACITY = 100;
+    protected static int INBOX_CAPACITY = 100;
     protected ExecutorService remoteRequestExecutor;
     protected int asyncTaskCount;
     protected Throwable error;
