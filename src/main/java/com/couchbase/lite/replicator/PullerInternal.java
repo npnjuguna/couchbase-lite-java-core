@@ -127,8 +127,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         changeTracker.setRequestHeaders(requestHeaders);
         changeTracker.setContinuous(lifecycle == Replication.Lifecycle.CONTINUOUS);
 
-        Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: beginReplicating() calling asyncTaskStarted()", this, Thread.currentThread());
-
         changeTracker.setUsePOST(serverIsSyncGatewayVersion("0.93"));
         changeTracker.start();
 
@@ -175,7 +173,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         if (inboxCount == 0) {
             // Nothing to do. Just bump the lastSequence.
-            Log.w(Log.TAG_SYNC, "%s no new remote revisions to fetch", this);
+            Log.w(Log.TAG_SYNC, "%s no new remote revisions to fetch.  add lastInboxSequence (%s) to pendingSequences (%s)", this, lastInboxSequence, pendingSequences);
             long seq = pendingSequences.addValue(lastInboxSequence);
             pendingSequences.removeSequence(seq);
             setLastSequence(pendingSequences.getCheckpointedValue());
