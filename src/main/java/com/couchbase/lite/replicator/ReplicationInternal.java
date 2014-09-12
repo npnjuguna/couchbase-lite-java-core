@@ -522,7 +522,7 @@ abstract class ReplicationInternal {
         request.setOnPreCompletionCaller(new RemoteRequestCompletionBlock() {
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
-                if (serverType == null) {
+                if (serverType == null && httpResponse != null) {
                     Header serverHeader = httpResponse.getFirstHeader("Server");
                     if (serverHeader != null) {
                         String serverVersion = serverHeader.getValue();
