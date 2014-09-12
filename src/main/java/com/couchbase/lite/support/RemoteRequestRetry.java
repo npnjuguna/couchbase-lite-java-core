@@ -172,14 +172,14 @@ public class RemoteRequestRetry implements Runnable {
             } else {
 
                 if (isTransientError(httpResponse, e)) {
-                    if (retryCount == MAX_RETRIES) {
-                        Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, but transient error.  retrying. url: %s", this, url);
+                    if (retryCount >= MAX_RETRIES) {
+                        Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, but transient error.  retries exhausted. url: %s", this, url);
                         // ok, we're out of retries, propagate completion block call
                         completed(httpResponse, result, e);
                     } else {
                         // we're going to try again, so don't call the original caller's
                         // completion block yet.  Eventually it will get called though
-                        Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, but transient error.  NOT retrying. url: %s", this, url);
+                        Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, but transient error.  will retry. url: %s", this, url);
                         requestHttpResponse = httpResponse;
                         requestResult = result;
                         requestThrowable = e;
