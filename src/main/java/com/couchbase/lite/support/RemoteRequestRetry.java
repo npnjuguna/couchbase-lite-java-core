@@ -128,7 +128,7 @@ public class RemoteRequestRetry implements Runnable {
                 retryCount += 1;
 
                 if (retryCount < MAX_RETRIES) {
-                    Log.d(Log.TAG_SYNC, "%s: Going to retry, sleeping. url: %s", this, url);
+                    Log.d(Log.TAG_SYNC, "%s: Going to retry, sleeping %d ms. url: %s", this, RETRY_DELAY_MS, url);
 
                     Thread.sleep(RETRY_DELAY_MS);
 
