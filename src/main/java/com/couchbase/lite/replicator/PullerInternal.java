@@ -49,6 +49,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     // Maximum number of revision IDs to pass in an "?atts_since=" query param
     public static final int MAX_NUMBER_OF_ATTS_SINCE = 50;
 
+    public static int CHANGE_TRACKER_RESTART_DELAY_MS = 10 * 1000;
+
     private ChangeTracker changeTracker;
     protected SequenceMap pendingSequences;
     protected Boolean canBulkGet;  // Does the server support _bulk_get requests?
@@ -815,8 +817,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     parentReplication.setLastError(new Exception(msg));
                     fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
 
-                    int delaySeconds = 10;  // TODO: make configurable
-                    Log.d(Log.TAG_SYNC, "Scheduling change tracker restart in %d seconds", delaySeconds);
+
+                    Log.d(Log.TAG_SYNC, "Scheduling change tracker restart in %d ms", CHANGE_TRACKER_RESTART_DELAY_MS);
                     workExecutor.schedule(new Runnable() {
                         @Override
                         public void run() {
@@ -829,7 +831,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                                 Log.d(Log.TAG_SYNC, "%s still no longer running, not restarting change tracker", this);
                             }
                         }
-                    }, delaySeconds, TimeUnit.SECONDS);
+                    }, CHANGE_TRACKER_RESTART_DELAY_MS, TimeUnit.MILLISECONDS);
                 }
 
 
