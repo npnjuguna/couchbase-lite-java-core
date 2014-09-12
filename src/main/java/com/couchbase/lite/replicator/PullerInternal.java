@@ -953,7 +953,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         super.goOnline();
 
         // start change tracker
-        startChangeTracker();
+        beginReplicating();
     }
 
 }
