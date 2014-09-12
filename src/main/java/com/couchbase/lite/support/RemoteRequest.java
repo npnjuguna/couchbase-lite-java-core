@@ -187,15 +187,15 @@ public class RemoteRequest implements Runnable {
 
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling httpClient.execute, url: %s", this, url);
 
-            if (this.request.isAborted()) {
+            if (requestParam.isAborted()) {
                 Log.v(Log.TAG_SYNC, "%s: RemoteRequest has already been aborted", this);
-                respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, this.request)), response);
+                respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, requestParam)), response);
                 return;
             }
 
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling httpClient.execute, client: %s url: %s", this, httpClient, url);
 
-            response = httpClient.execute(this.request);
+            response = httpClient.execute(requestParam);
 
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest called httpClient.execute, url: %s", this, url);
 
@@ -249,8 +249,6 @@ public class RemoteRequest implements Runnable {
         finally {
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest finally block.  url: %s", this, url);
         }
-
-
 
 
         Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  url: %s, error: %s", this, url, error);
