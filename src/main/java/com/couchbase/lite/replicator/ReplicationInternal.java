@@ -493,7 +493,7 @@ abstract class ReplicationInternal {
             }
         });
 
-        Future future = remoteRequestExecutor.submit(request);
+        Future future = request.submit();
         return future;
 
     }

@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * in between the retries.
  *
  */
-public class RemoteRequestRetry<T> implements Runnable, Future<T> {
+public class RemoteRequestRetry<T> implements Future<T> {
 
     public static int MAX_RETRIES = 3;  // TODO: rename to MAX_ATTEMPTS
     public static int RETRY_DELAY_MS = 10 * 1000;
@@ -121,78 +121,7 @@ public class RemoteRequestRetry<T> implements Runnable, Future<T> {
     }
 
 
-    @Override
-    public void run() {
 
-        try {
-
-            Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry run() started, url: %s", this, url);
-
-            while (retryCount < MAX_RETRIES) {
-
-                requestHttpResponse = null;
-                requestResult = null;
-                requestThrowable = null;
-
-                RemoteRequest request = new RemoteRequest(
-                        workExecutor,
-                        clientFactory,
-                        method,
-                        url,
-                        body,
-                        db,
-                        requestHeaders,
-                        onCompletionInner
-                );
-
-                if (this.authenticator != null) {
-                    request.setAuthenticator(this.authenticator);
-                }
-                if (this.onPreCompletionCaller != null) {
-                    request.setOnPreCompletion(this.onPreCompletionCaller);
-                }
-
-                // wait for the future to return
-
-                Future future = requestExecutor.submit(request);
-                Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry waiting for future. url: %s", this, url);
-
-                future.get();
-
-                Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry future returned. url: %s", this, url);
-
-
-                if (completedSuccessfully.get() == true) {
-                    // we're done
-                    Log.d(Log.TAG_SYNC, "%s: completedSuccessfully, we are done. url: %s", this, url);
-                    onCompletionCaller.onCompletion(requestHttpResponse, requestResult, requestThrowable);
-                    return;
-                }
-
-                retryCount += 1;
-
-                if (retryCount < MAX_RETRIES) {
-                    Log.d(Log.TAG_SYNC, "%s: Going to retry, sleeping %d ms. url: %s", this, RETRY_DELAY_MS, url);
-
-                    Thread.sleep(RETRY_DELAY_MS);
-
-                    Log.d(Log.TAG_SYNC, "%s: Done sleeping. url: %s", this, url);
-                }
-
-
-            }
-
-        } catch (Throwable e) {
-            Log.e(Log.TAG_SYNC, "RemoteRequestRetry.run() exception: %s", e);
-        }
-
-        // exhausted attempts, callback to original caller with result.  requestThrowable
-        // should contain most recent error that we received.
-        onCompletionCaller.onCompletion(requestHttpResponse, requestResult, requestThrowable);
-
-        Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry run() finished, url: %s", this, url);
-
-    }
 
     RemoteRequestCompletionBlock onCompletionInner = new RemoteRequestCompletionBlock() {
 
