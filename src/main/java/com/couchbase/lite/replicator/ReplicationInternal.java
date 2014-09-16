@@ -85,7 +85,7 @@ abstract class ReplicationInternal {
     protected Batcher<RevisionInternal> batcher;
     protected static final int PROCESSOR_DELAY = 500;
     protected static int INBOX_CAPACITY = 100;
-    protected ExecutorService remoteRequestExecutor;
+    protected ScheduledExecutorService remoteRequestExecutor;
     protected int asyncTaskCount;
     protected Throwable error;
     private String remoteCheckpointDocID;
@@ -291,7 +291,8 @@ abstract class ReplicationInternal {
 
     protected void goOnlineInitialStartup() {
 
-        remoteRequestExecutor = Executors.newFixedThreadPool(EXECUTOR_THREAD_POOL_SIZE);
+        remoteRequestExecutor = Executors.newScheduledThreadPool(EXECUTOR_THREAD_POOL_SIZE);
+
         checkSession();
 
     }

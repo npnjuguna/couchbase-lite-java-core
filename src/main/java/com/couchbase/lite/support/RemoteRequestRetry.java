@@ -11,9 +11,15 @@ import org.apache.http.client.methods.HttpUriRequest;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -24,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * in between the retries.
  *
  */
-public class RemoteRequestRetry implements Runnable {
+public class RemoteRequestRetry<T> implements Runnable, Future<T> {
 
     public static int MAX_RETRIES = 3;  // TODO: rename to MAX_ATTEMPTS
     public static int RETRY_DELAY_MS = 10 * 1000;
@@ -48,10 +54,11 @@ public class RemoteRequestRetry implements Runnable {
     private HttpResponse requestHttpResponse;
     private Object requestResult;
     private Throwable requestThrowable;
+    private BlockingQueue<Future> pendingRequests;
 
     protected Map<String, Object> requestHeaders;
 
-    public RemoteRequestRetry(ExecutorService requestExecutor,
+    public RemoteRequestRetry(ScheduledExecutorService requestExecutor,
                               ScheduledExecutorService workExecutor,
                               HttpClientFactory clientFactory,
                               String method,
@@ -70,11 +77,48 @@ public class RemoteRequestRetry implements Runnable {
         this.workExecutor = workExecutor;
         this.requestHeaders = requestHeaders;
         this.db = db;
+        this.pendingRequests = new LinkedBlockingDeque<Future>();
 
         Log.v(Log.TAG_SYNC, "%s: RemoteRequestRetry created, url: %s", this, url);
 
     }
 
+    public Future submit() {
+
+        RemoteRequest request = generateRemoteRequest();
+
+        Future future = requestExecutor.submit(request);
+        pendingRequests.add(future);
+
+        return this;
+
+    }
+
+    private RemoteRequest generateRemoteRequest() {
+
+        requestHttpResponse = null;
+        requestResult = null;
+        requestThrowable = null;
+
+        RemoteRequest request = new RemoteRequest(
+                workExecutor,
+                clientFactory,
+                method,
+                url,
+                body,
+                db,
+                requestHeaders,
+                onCompletionInner
+        );
+
+        if (this.authenticator != null) {
+            request.setAuthenticator(this.authenticator);
+        }
+        if (this.onPreCompletionCaller != null) {
+            request.setOnPreCompletion(this.onPreCompletionCaller);
+        }
+        return request;
+    }
 
 
     @Override
@@ -157,6 +201,7 @@ public class RemoteRequestRetry implements Runnable {
             requestResult = result;
             requestThrowable = e;
             completedSuccessfully.set(true);
+            onCompletionCaller.onCompletion(requestHttpResponse, requestResult, requestThrowable);
         }
 
         @Override
@@ -183,6 +228,11 @@ public class RemoteRequestRetry implements Runnable {
                         requestHttpResponse = httpResponse;
                         requestResult = result;
                         requestThrowable = e;
+
+                        retryCount += 1;
+
+                        submit();
+
                     }
                 } else {
                     Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, non-transient error.  NOT retrying. url: %s", this, url);
@@ -229,4 +279,53 @@ public class RemoteRequestRetry implements Runnable {
     public void setOnPreCompletionCaller(RemoteRequestCompletionBlock onPreCompletionCaller) {
         this.onPreCompletionCaller = onPreCompletionCaller;
     }
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+        return false;
+    }
+
+    @Override
+    public boolean isCancelled() {
+        return false;
+    }
+
+    @Override
+    public boolean isDone() {
+        return false;
+    }
+
+    @Override
+    public T get() throws InterruptedException, ExecutionException {
+
+        while (retryCount <= MAX_RETRIES) {
+
+            // Take a future from the queue
+            Future future = pendingRequests.take();
+
+            future.get();
+
+            if (completedSuccessfully.get() == true) {
+                // we're done
+                return null;
+            }
+
+            // retryCount += 1;
+
+            // submit();
+
+        }
+
+        // exhausted attempts, callback to original caller with result.  requestThrowable
+        // should contain most recent error that we received.
+        // onCompletionCaller.onCompletion(requestHttpResponse, requestResult, requestThrowable);
+
+        return null;
+    }
+
+    @Override
+    public T get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+        return get();
+    }
+
 }
