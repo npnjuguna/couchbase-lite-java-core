@@ -128,7 +128,19 @@ abstract class ReplicationInternal {
 
         changeListeners = new CopyOnWriteArrayList<ChangeListener>();
 
-        changeListenerNotifyStyle = ChangeListenerNotifyStyle.SYNC;
+        // The reason that notifications are ASYNC is to make the public API call
+        // Replication.getStatus() work as expected.  Because if this is set to SYNC,
+        // it causes the following issue:
+        // - Notification sent from state transition from INITIAL -> RUNNING.
+        // - Replication change listener called back during transition.
+        // - Replication change listener calls replication.status(), and gets INITIAL instead of RUNNING.
+        // - Replication change listener never notified when it goes into the RUNNING state.
+        // Workarounds to above problem:
+        // - By sending notifications ASYNC, by the time that the listener calls replication.status(),
+        //   calling replication.getStatus() will return RUNNING.
+        // - Alternatively, change listeners could look at the passed transition rather than
+        //   depending on calling replication.status(), and changeListenerNotifyStyle could be set to SYNC.
+        changeListenerNotifyStyle = ChangeListenerNotifyStyle.ASYNC;
 
         pendingFutures = new LinkedBlockingQueue<Future>();
 

@@ -32,6 +32,20 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      */
     public static final String REPLICATOR_DATABASE_NAME = "_replicator";
 
+    /**
+     * Options for what metadata to include in document bodies
+     */
+    public enum ReplicationStatus {
+        /** The replication is finished or hit a fatal error. */
+        REPLICATION_STOPPED,
+        /** The remote host is currently unreachable. */
+        REPLICATION_OFFLINE,
+        /** Continuous replication is caught up and waiting for more changes.*/
+        REPLICATION_IDLE,
+        /** The replication is actively transferring data. */
+        REPLICATION_ACTIVE
+    }
+
     protected Database db;
     protected URL remote;
     protected HttpClientFactory clientFactory;
@@ -271,6 +285,24 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     @InterfaceAudience.Public
     public void removeChangeListener(ChangeListener changeListener) {
         changeListeners.remove(changeListener);
+    }
+
+    /**
+     * The replication's current state, one of {stopped, offline, idle, active}.
+     */
+    @InterfaceAudience.Public
+    public ReplicationStatus getStatus() {
+        if (replicationInternal == null) {
+            return ReplicationStatus.REPLICATION_STOPPED;
+        } else if (replicationInternal.stateMachine.isInState(ReplicationState.OFFLINE)) {
+            return ReplicationStatus.REPLICATION_OFFLINE;
+        } else if (replicationInternal.stateMachine.isInState(ReplicationState.IDLE)) {
+            return ReplicationStatus.REPLICATION_IDLE;
+        } else if (replicationInternal.stateMachine.isInState(ReplicationState.STOPPED)) {
+            return ReplicationStatus.REPLICATION_STOPPED;
+        } else {
+            return ReplicationStatus.REPLICATION_ACTIVE;
+        }
     }
 
     /**
