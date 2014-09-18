@@ -423,9 +423,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             setError(e);
                             revisionFailed();
 
-                            // TODO: resolve this by porting upstream ios fix.
-                            // TODO: I don't have the bug handy, but there is a known bug caused
-                            // TODO: by the line below, which is causing unit tests to fail.
+                            // TODO: There is a known bug caused by the line below, which is
+                            // TODO: causing testMockSinglePullCouchDb to fail when running on a Nexus5 device.
+                            // TODO: (the batching behavior is different in that case)
+                            // TODO: See https://github.com/couchbase/couchbase-lite-java-core/issues/271
                             // completedChangesCount.addAndGet(bulkRevs.size());
 
                         } else {
