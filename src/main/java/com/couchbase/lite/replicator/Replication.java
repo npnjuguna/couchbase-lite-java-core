@@ -18,6 +18,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 
 /**
  * The external facade for the Replication API
@@ -68,7 +69,12 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                 remote,
                 direction,
                 db.getManager().getDefaultHttpClientFactory(),
-                Executors.newSingleThreadScheduledExecutor()
+                Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        return new Thread(r, "CBLReplicationWorker");
+                    }
+                })
         );
 
     }

@@ -117,4 +117,11 @@ public class Utils {
         return Status.UNKNOWN;
     }
 
+    public static String shortenString(String orig, int maxLength) {
+        if (orig == null || orig.length() <= maxLength) {
+            return orig;
+        }
+        return orig.substring(0, maxLength);
+    }
+
 }

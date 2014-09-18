@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -134,7 +135,12 @@ public final class Manager {
         // which must run on either:
         // - a shared single threaded executor
         // - its own single threaded executor
-        workExecutor = Executors.newSingleThreadScheduledExecutor();
+        workExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                return new Thread(r, "CBLManagerWorkExecutor");
+            }
+        });
 
     }
 

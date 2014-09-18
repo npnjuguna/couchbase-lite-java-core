@@ -49,6 +49,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -303,7 +304,15 @@ abstract class ReplicationInternal {
 
     protected void goOnlineInitialStartup() {
 
-        remoteRequestExecutor = Executors.newScheduledThreadPool(EXECUTOR_THREAD_POOL_SIZE);
+        remoteRequestExecutor = Executors.newScheduledThreadPool(EXECUTOR_THREAD_POOL_SIZE, new ThreadFactory() {
+            private int counter = 0;
+            @Override
+            public Thread newThread(Runnable r) {
+                String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
+                String threadName = String.format( "CBLRequestWorker-%s-%s", replicationIdentifier, counter++);
+                return new Thread(r, threadName);
+            }
+        });
 
         checkSession();
 
