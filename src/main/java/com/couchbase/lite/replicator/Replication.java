@@ -421,6 +421,25 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         /* package */ void setError(Throwable error) {
             this.error = error;
         }
+
+        public String toString() {
+            StringBuffer sb = new StringBuffer();
+            sb.append(getSource().direction);
+            sb.append(" replication event. Source: ");
+            sb.append(getSource());
+            if (getTransition() != null) {
+                sb.append(" Transition: ");
+                sb.append(getTransition().getSource());
+                sb.append(" -> ");
+                sb.append(getTransition().getDestination());
+            }
+            sb.append(" Total changes: ");
+            sb.append(getChangeCount());
+            sb.append(" Completed changes: ");
+            sb.append(getCompletedChangeCount());
+            return sb.toString();
+        }
+
     }
 
     /**
