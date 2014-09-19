@@ -308,8 +308,13 @@ abstract class ReplicationInternal {
             private int counter = 0;
             @Override
             public Thread newThread(Runnable r) {
-                String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
-                String threadName = String.format( "CBLRequestWorker-%s-%s", replicationIdentifier, counter++);
+                String threadName = "CBLRequestWorker";
+                try {
+                    String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
+                    threadName = String.format( "CBLRequestWorker-%s-%s", replicationIdentifier, counter++);
+                } catch (Exception e) {
+                    Log.e(Log.TAG_SYNC, "Error creating thread name", e);
+                }
                 return new Thread(r, threadName);
             }
         });
