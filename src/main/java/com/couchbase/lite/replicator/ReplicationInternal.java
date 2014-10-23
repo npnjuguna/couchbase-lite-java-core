@@ -73,6 +73,19 @@ abstract class ReplicationInternal {
 
     private static int lastSessionID = 0;
 
+    protected static final int PROCESSOR_DELAY = 500;
+
+    protected static int INBOX_CAPACITY = 100;
+
+    // when a continuous replication has gone idle and failed to transfer revisions,
+    // this is the amount of time of the initial delay (it will use a backoff algorithm
+    // and keep increasing this delay)
+    private static int FAILED_REVISION_RETRY_INITIAL_DELAY_MS = 60 * 1000;
+
+    // keep track of how many times we've retried the replication in the case
+    // we had failed revisions during a continuous replication
+    private int numFailedRevisionRetries = 0;
+
     protected Replication parentReplication;
     protected Database db;
     protected URL remote;
@@ -85,8 +98,7 @@ abstract class ReplicationInternal {
     protected Map<String, Object> requestHeaders;
     private String serverType;
     protected Batcher<RevisionInternal> batcher;
-    protected static final int PROCESSOR_DELAY = 500;
-    protected static int INBOX_CAPACITY = 100;
+
     protected ScheduledExecutorService remoteRequestExecutor;
     protected int asyncTaskCount;
     protected Throwable error;
@@ -1052,6 +1064,7 @@ abstract class ReplicationInternal {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 notifyChangeListenersStateTransition(transition);
+                scheduleRetryIfFailedRevisions();
             }
         });
         stateMachine.configure(ReplicationState.IDLE).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
@@ -1363,6 +1376,13 @@ abstract class ReplicationInternal {
     public String getSessionID() {
         return sessionID;
     }
+
+
+    private void scheduleRetryIfFailedRevisions() {
+        
+
+    }
+
 }
 
 
