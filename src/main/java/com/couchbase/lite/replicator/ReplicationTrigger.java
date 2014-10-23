@@ -7,6 +7,7 @@ package com.couchbase.lite.replicator;
 enum ReplicationTrigger {
     START,
     WAITING_FOR_CHANGES,
+    RETRY_FAILED_REVS,
     GO_OFFLINE,
     GO_ONLINE,
     STOP_GRACEFUL,

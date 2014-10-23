@@ -50,6 +50,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -80,11 +81,18 @@ abstract class ReplicationInternal {
     // when a continuous replication has gone idle and failed to transfer revisions,
     // this is the amount of time of the initial delay (it will use a backoff algorithm
     // and keep increasing this delay)
-    private static int FAILED_REVISION_RETRY_INITIAL_DELAY_MS = 60 * 1000;
+    protected static int FAILED_REVISION_RETRY_INITIAL_DELAY_MS = 60 * 1000;
+
+    // the max number of times we'll retry the replication if a continuous replication
+    // goes idle with failed revisions
+    private static int MAX_RETRIES_FAILED_REVISIONS = 3;
 
     // keep track of how many times we've retried the replication in the case
     // we had failed revisions during a continuous replication
     private int numFailedRevisionRetries = 0;
+
+    // if we have a pending future for retrying revisions, store it here
+    Future revisionRetryFuture;
 
     protected Replication parentReplication;
     protected Database db;
@@ -388,6 +396,7 @@ abstract class ReplicationInternal {
             }
 
         });
+        Log.d(Log.TAG_SYNC, "checkSessionAtPath() add pendingFuture");
         pendingFutures.add(future);
     }
 
@@ -1023,6 +1032,10 @@ abstract class ReplicationInternal {
                 ReplicationTrigger.STOP_IMMEDIATE,
                 ReplicationState.STOPPED
         );
+        stateMachine.configure(ReplicationState.IDLE).permit(
+                ReplicationTrigger.RETRY_FAILED_REVS,
+                ReplicationState.RUNNING
+        );
 
         // ignored transitions
         stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.START);
@@ -1040,6 +1053,10 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.GO_ONLINE);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.GO_ONLINE);
         stateMachine.configure(ReplicationState.IDLE).ignore(ReplicationTrigger.GO_ONLINE);
+        stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.RETRY_FAILED_REVS);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.RETRY_FAILED_REVS);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.RETRY_FAILED_REVS);
+        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.RETRY_FAILED_REVS);
 
         // actions
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
@@ -1071,8 +1088,12 @@ abstract class ReplicationInternal {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 notifyChangeListenersStateTransition(transition);
+                if (transition.getTrigger() == ReplicationTrigger.RETRY_FAILED_REVS) {
+                    checkSession();
+                }
             }
         });
+
         stateMachine.configure(ReplicationState.OFFLINE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
@@ -1379,7 +1400,15 @@ abstract class ReplicationInternal {
 
 
     private void scheduleRetryIfFailedRevisions() {
-        
+        if (error != null) /*(_revisionsFailed > 0)*/ {
+            revisionRetryFuture = workExecutor.schedule(new Runnable() {
+                @Override
+                public void run() {
+                    fireTrigger(ReplicationTrigger.RETRY_FAILED_REVS);
+                }
+            }, FAILED_REVISION_RETRY_INITIAL_DELAY_MS, TimeUnit.MILLISECONDS);
+
+        }
 
     }
 

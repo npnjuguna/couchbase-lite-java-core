@@ -131,6 +131,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
                 // TODO: should we call batcher.flushAll(); here?
                 batcher.waitForPendingFutures();
+                Log.d(Log.TAG_SYNC, "/batcher.waitForPendingFutures()");
             }
 
             while (!pendingFutures.isEmpty()) {
@@ -145,6 +146,16 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     e.printStackTrace();
                 }
             }
+
+            // since it's possible that in the process of waiting for pendingFutures,
+            // new items were added to the batcher, let's wait for the batcher to
+            // drain again.
+            if (batcher != null) {
+                Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                batcher.waitForPendingFutures();
+                Log.d(Log.TAG_SYNC, "/batcher.waitForPendingFutures()");
+            }
+
 
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
@@ -219,6 +230,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             }
 
         });
+        Log.d(Log.TAG_SYNC, "maybeCreateRemoteDB() add pendingFuture");
         pendingFutures.add(future);
     }
 
@@ -273,10 +285,13 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             db.addChangeListener(this);
 
             // once this work drains, go into the IDLE state
+            Log.d(Log.TAG_SYNC, "Kicking off thread to wait until work drains");
             new Thread(new Runnable() {
                 @Override
                 public void run() {
+                    Log.d(Log.TAG_SYNC, "waitForPendingFutures()");
                     waitForPendingFutures();
+                    Log.d(Log.TAG_SYNC, "/waitForPendingFutures()");
                     fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
                 }
             }).start();
@@ -451,6 +466,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             }
 
         });
+        Log.d(Log.TAG_SYNC, "processInbox() add pendingFuture");
         pendingFutures.add(future);
 
     }
@@ -518,6 +534,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
             }
         });
+        Log.d(Log.TAG_SYNC, "uploadBulkDocs() add pendingFuture");
         pendingFutures.add(future);
 
     }
@@ -625,6 +642,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
             }
         });
+        Log.d(Log.TAG_SYNC, "uploadMultipartRevision() add pendingFuture");
         pendingFutures.add(future);
 
         return true;
@@ -656,6 +674,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         }
                     }
                 });
+        Log.d(Log.TAG_SYNC, "uploadJsonRevision() add pendingFuture");
         pendingFutures.add(future);
     }
 
