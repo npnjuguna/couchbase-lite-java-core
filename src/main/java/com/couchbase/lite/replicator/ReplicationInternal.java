@@ -192,6 +192,20 @@ abstract class ReplicationInternal {
     }
 
     /**
+     * Trigger this replication to go back into RUNNING state (async)
+     */
+    public void triggerGotChanges() {
+        fireTrigger(ReplicationTrigger.GOT_CHANGES);
+    }
+
+    /**
+     * Trigger this replication to go back into IDLE state (async)
+     */
+    public void triggerProcessedChanges() {
+        fireTrigger(ReplicationTrigger.PROCESSED_CHANGES);
+    }
+
+    /**
      * Trigger this replication to go online (async)
      */
     public void triggerGoOnline() {
@@ -1024,6 +1038,10 @@ abstract class ReplicationInternal {
                 ReplicationTrigger.GO_OFFLINE,
                 ReplicationState.OFFLINE
         );
+        stateMachine.configure(ReplicationState.RUNNING).permit(
+                ReplicationTrigger.PROCESSED_CHANGES,
+                ReplicationState.IDLE
+        );
         stateMachine.configure(ReplicationState.OFFLINE).permit(
                 ReplicationTrigger.GO_ONLINE,
                 ReplicationState.RUNNING
@@ -1031,6 +1049,10 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPING).permit(
                 ReplicationTrigger.STOP_IMMEDIATE,
                 ReplicationState.STOPPED
+        );
+        stateMachine.configure(ReplicationState.IDLE).permit(
+                ReplicationTrigger.GOT_CHANGES,
+                ReplicationState.RUNNING
         );
         stateMachine.configure(ReplicationState.IDLE).permit(
                 ReplicationTrigger.RETRY_FAILED_REVS,
@@ -1057,6 +1079,14 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.RETRY_FAILED_REVS);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.RETRY_FAILED_REVS);
         stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.RETRY_FAILED_REVS);
+        stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.GOT_CHANGES);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.GOT_CHANGES);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.GOT_CHANGES);
+        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.GOT_CHANGES);
+        stateMachine.configure(ReplicationState.IDLE).ignore(ReplicationTrigger.PROCESSED_CHANGES);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.PROCESSED_CHANGES);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.PROCESSED_CHANGES);
+        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.PROCESSED_CHANGES);
 
         // actions
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {

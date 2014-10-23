@@ -8,6 +8,8 @@ enum ReplicationTrigger {
     START,
     WAITING_FOR_CHANGES,
     RETRY_FAILED_REVS,
+    GOT_CHANGES,
+    PROCESSED_CHANGES,
     GO_OFFLINE,
     GO_ONLINE,
     STOP_GRACEFUL,

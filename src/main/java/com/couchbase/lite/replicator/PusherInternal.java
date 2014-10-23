@@ -346,6 +346,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @InterfaceAudience.Private
     protected void processInbox(final RevisionList changes) {
 
+        triggerGotChanges();
+
         // Generate a set of doc/rev IDs in the JSON format that _revs_diff wants:
         // <http://wiki.apache.org/couchdb/HttpPostRevsDiff>
         Map<String,List<String>> diffs = new HashMap<String,List<String>>();
@@ -373,6 +375,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 if (e != null) {
                     setError(e);
                     revisionFailed();
+                    triggerProcessedChanges();
                 } else if (results.size() != 0) {
                     // Go through the list of local changes again, selecting the ones the destination server
                     // said were missing and mapping them to a JSON dictionary in the form _bulk_docs wants:
@@ -461,6 +464,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     for (RevisionInternal revisionInternal : changes) {
                         removePending(revisionInternal);
                     }
+                    triggerProcessedChanges();
                 }
 
             }
@@ -527,10 +531,12 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 if (e != null) {
                     setError(e);
                     revisionFailed();
+
                 } else {
                     Log.v(Log.TAG_SYNC, "%s: POSTed to _bulk_docs", PusherInternal.this);
                 }
                 addToCompletedChangesCount(numDocsToSend);
+                triggerProcessedChanges();
 
             }
         });
