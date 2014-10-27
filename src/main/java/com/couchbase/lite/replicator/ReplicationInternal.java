@@ -85,7 +85,7 @@ abstract class ReplicationInternal {
 
     // the max number of times we'll retry the replication if a continuous replication
     // goes idle with failed revisions
-    private static int MAX_RETRIES_FAILED_REVISIONS = 3;
+    protected static int MAX_RETRIES_FAILED_REVISIONS = 3;
 
     // keep track of how many times we've retried the replication in the case
     // we had failed revisions during a continuous replication
@@ -1430,17 +1430,36 @@ abstract class ReplicationInternal {
 
 
     private void scheduleRetryIfFailedRevisions() {
+
         if (error != null) /*(_revisionsFailed > 0)*/ {
-            revisionRetryFuture = workExecutor.schedule(new Runnable() {
-                @Override
-                public void run() {
-                    fireTrigger(ReplicationTrigger.RETRY_FAILED_REVS);
-                }
-            }, FAILED_REVISION_RETRY_INITIAL_DELAY_MS, TimeUnit.MILLISECONDS);
+
+            if (numFailedRevisionRetries < MAX_RETRIES_FAILED_REVISIONS) {
+                int sleepAmountWithBackoff = numFailedRevisionRetries * FAILED_REVISION_RETRY_INITIAL_DELAY_MS;  // might be 0
+                int sleepAmountMs = Math.max(FAILED_REVISION_RETRY_INITIAL_DELAY_MS, sleepAmountWithBackoff);
+
+                Log.i(Log.TAG_SYNC, "%s: Will retry failed revs in %s ms.  numFailedRevisionRetries: %d", this, sleepAmountMs, numFailedRevisionRetries);
+
+                numFailedRevisionRetries += 1;
+
+                revisionRetryFuture = workExecutor.schedule(new Runnable() {
+                    @Override
+                    public void run() {
+                        fireTrigger(ReplicationTrigger.RETRY_FAILED_REVS);
+                    }
+                }, sleepAmountMs, TimeUnit.MILLISECONDS);
+
+            } else {
+
+                Log.i(Log.TAG_SYNC, "%s: Already exhausted number of failed retry attempts, giving up.", this);
+
+                // TODO: need something to reset numFailedRevisionRetries back to 0!
+
+            }
 
         }
 
     }
+
 
 }
 
