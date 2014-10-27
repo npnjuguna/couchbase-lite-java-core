@@ -286,14 +286,14 @@ abstract class ReplicationInternal {
      * Take the replication offline
      */
     protected void goOffline() {
-        // implemented by subclasses
+        resetFailedRevisionRetries();
     }
 
     /**
      * Put the replication back online after being offline
      */
     protected void goOnline() {
-        // implemented by subclasses
+        resetFailedRevisionRetries();
 
     }
 
@@ -1460,6 +1460,16 @@ abstract class ReplicationInternal {
 
     }
 
+
+    private void resetFailedRevisionRetries() {
+
+        if (revisionRetryFuture != null) {
+            revisionRetryFuture.cancel(true);
+        }
+
+        numFailedRevisionRetries = 0;
+
+    }
 
 }
 
