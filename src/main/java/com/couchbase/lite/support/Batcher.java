@@ -196,19 +196,27 @@ public class Batcher<T> {
 
     private void scheduleWithDelay(int suggestedDelay) {
 
+        // keep a list of expired pending futures so we can remove them from pendingFutures
+        List<ScheduledFuture> futuresToForget = new ArrayList<ScheduledFuture>();
+
+        // do we already have anything scheduled?  if so, ignore this call to scheduleWithDelay()
         Iterator<ScheduledFuture> iterator = pendingFutures.iterator();
         while (iterator.hasNext()) {
-            Future pendingFuture = iterator.next();
+            ScheduledFuture pendingFuture = iterator.next();
             // if we already have an active pending future, ignore this call
             if (pendingFuture != null && !pendingFuture.isCancelled() && !pendingFuture.isDone()) {
                 Log.v(Log.TAG_BATCHER, "%s: scheduleWithDelay already has a pending task: %s. ignoring.", this, pendingFuture);
                 return;
+            } else {
+                futuresToForget.add(pendingFuture);
             }
         }
 
-        // TODO: remove expired futures
-
-        Log.v(Log.TAG_BATCHER, "%s: num pending futures: %d", this, pendingFutures.size());
+        // clean out expired futures we no longer care about
+        for (ScheduledFuture futureToForget : futuresToForget) {
+            Log.v(Log.TAG_BATCHER, "%s: forgetting about expired future: %s", this, futureToForget);
+            pendingFutures.remove(futureToForget);
+        }
 
         Log.v(Log.TAG_BATCHER, "%s: scheduleWithDelay called with delayMs: %d ms", this, suggestedDelay);
         scheduledDelay = suggestedDelay;
