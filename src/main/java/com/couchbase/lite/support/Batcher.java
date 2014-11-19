@@ -4,9 +4,11 @@ import com.couchbase.lite.util.Log;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -19,7 +21,6 @@ import java.util.concurrent.TimeUnit;
 public class Batcher<T> {
 
     private ScheduledExecutorService workExecutor;
-    private ScheduledFuture pendingFuture;
 
     private int capacity;
     private int delayMs;
@@ -28,6 +29,7 @@ public class Batcher<T> {
     private BatchProcessor<T> processor;
     private boolean scheduled = false;
     private long lastProcessedTime;
+    private BlockingQueue<ScheduledFuture> pendingFutures;
 
     private Runnable processNowRunnable = new Runnable() {
 
@@ -57,6 +59,7 @@ public class Batcher<T> {
         this.delayMs = delayMs;
         this.processor = processor;
         this.inbox = new LinkedBlockingQueue<T>();
+        this.pendingFutures = new LinkedBlockingQueue<ScheduledFuture>();
 
     }
 
@@ -79,21 +82,28 @@ public class Batcher<T> {
 
     public void waitForPendingFutures() {
 
+        Log.d(Log.TAG_BATCHER, "%s: waitForPendingFutures", this);
+
         try {
-            try {
-                Log.d(Log.TAG_BATCHER, "calling future.get() on %s", pendingFuture);
-                pendingFuture.get();
-                Log.d(Log.TAG_BATCHER, "done calling future.get() on %s", pendingFuture);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (ExecutionException e) {
-                e.printStackTrace();
+
+            while (!pendingFutures.isEmpty()) {
+                Future future = pendingFutures.take();
+                try {
+                    Log.d(Log.TAG_BATCHER, "calling future.get() on %s", future);
+                    future.get();
+                    Log.d(Log.TAG_BATCHER, "done calling future.get() on %s", future);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (ExecutionException e) {
+                    e.printStackTrace();
+                }
             }
 
         } catch (Exception e) {
             Log.e(Log.TAG_BATCHER, "Exception waiting for pending futures: %s", e);
         }
 
+        Log.d(Log.TAG_BATCHER, "%s: /waitForPendingFutures", this);
     }
 
     /**
@@ -111,16 +121,6 @@ public class Batcher<T> {
         scheduleWithDelay(delayToUse());
     }
 
-
-    /**
-     * Empties the queue without processing any of the objects in it.
-     */
-    public void clear() {
-        Log.v(Log.TAG_BATCHER, "%s: clear() called, setting inbox to null", this);
-        unschedule();
-        inbox.clear();
-    }
-
     public int count() {
         synchronized(this) {
             if(inbox == null) {
@@ -135,6 +135,7 @@ public class Batcher<T> {
 
         Log.v(Log.TAG_BATCHER, this + ": processNow() called");
 
+        boolean processMoreImmediately = false;
         scheduled = false;
         List<T> toProcess = new ArrayList<T>();
 
@@ -168,13 +169,12 @@ public class Batcher<T> {
             Log.v(Log.TAG_BATCHER, "%s: inbox.size() > capacity, moving %d items from inbox -> toProcess array", this, toProcess.size());
 
             // There are more objects left, so schedule them Real Soon:
-            // TODO: this is bad, because the pendingFuture will change under peoples feet
-            pendingFuture = workExecutor.schedule(processNowRunnable, 0, TimeUnit.MILLISECONDS);
+            processMoreImmediately = true;
 
         }
 
         if(toProcess != null && toProcess.size() > 0) {
-            Log.v(Log.TAG_BATCHER, "%s: invoking processor with %d items ", this, toProcess.size());
+            Log.v(Log.TAG_BATCHER, "%s: invoking processor %s with %d items ", this, processor, toProcess.size());
             processor.process(toProcess);
         } else {
             Log.v(Log.TAG_BATCHER, "%s: nothing to process", this);
@@ -184,38 +184,39 @@ public class Batcher<T> {
         // in case we ignored any schedule requests while processing, if
         // we have more items in inbox, lets schedule another processing attempt
         if (inbox.size() > 0) {
-            int delayToUse = delayToUse();
-            pendingFuture = workExecutor.schedule(processNowRunnable, delayToUse, TimeUnit.MILLISECONDS);
+            int delayToUse = 0;
+            if (!processMoreImmediately) {
+                delayToUse = delayToUse();
+            }
+            ScheduledFuture pendingFuture = workExecutor.schedule(processNowRunnable, delayToUse, TimeUnit.MILLISECONDS);
+            pendingFutures.add(pendingFuture);
+
         }
     }
 
     private void scheduleWithDelay(int suggestedDelay) {
 
-        // if we already have an active pending future, ignore this call
-        if (pendingFuture != null && !pendingFuture.isCancelled() && !pendingFuture.isDone()) {
-            Log.v(Log.TAG_BATCHER, "%s: scheduleWithDelay already has a pending task: %s. ignoring.", this, pendingFuture);
-            return;
+        Iterator<ScheduledFuture> iterator = pendingFutures.iterator();
+        while (iterator.hasNext()) {
+            Future pendingFuture = iterator.next();
+            // if we already have an active pending future, ignore this call
+            if (pendingFuture != null && !pendingFuture.isCancelled() && !pendingFuture.isDone()) {
+                Log.v(Log.TAG_BATCHER, "%s: scheduleWithDelay already has a pending task: %s. ignoring.", this, pendingFuture);
+                return;
+            }
         }
+
+        // TODO: remove expired futures
+
+        Log.v(Log.TAG_BATCHER, "%s: num pending futures: %d", this, pendingFutures.size());
 
         Log.v(Log.TAG_BATCHER, "%s: scheduleWithDelay called with delayMs: %d ms", this, suggestedDelay);
         scheduledDelay = suggestedDelay;
         Log.v(Log.TAG_BATCHER, "workExecutor.schedule() with delayMs: %d ms", suggestedDelay);
-        pendingFuture = workExecutor.schedule(processNowRunnable, suggestedDelay, TimeUnit.MILLISECONDS);
+        ScheduledFuture pendingFuture = workExecutor.schedule(processNowRunnable, suggestedDelay, TimeUnit.MILLISECONDS);
         Log.v(Log.TAG_BATCHER, "%s: created future: %s", this, pendingFuture);
+        pendingFutures.add(pendingFuture);
 
-    }
-
-    private void unschedule() {
-        Log.v(Log.TAG_BATCHER, this + ": unschedule() called");
-
-        try {
-            Log.d(Log.TAG_BATCHER, "calling future.cancel() on %s", pendingFuture);
-            pendingFuture.cancel(true);
-            Log.d(Log.TAG_BATCHER, "done calling future.cancel() on %s", pendingFuture);
-
-        } catch (Exception e) {
-            Log.e(Log.TAG_BATCHER, "Exception waiting for pending futures: %s", e);
-        }
     }
 
     /*
