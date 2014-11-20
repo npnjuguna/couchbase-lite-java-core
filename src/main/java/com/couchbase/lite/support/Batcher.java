@@ -77,7 +77,16 @@ public class Batcher<T> {
 
         inbox.addAll(objects);
 
-        scheduleWithDelay(delayToUse());
+        if (inbox.size() >= capacity) {
+            Log.v(Log.TAG_BATCHER, "%s: calling scheduleWithDelay(0)", this);
+            unscheduleAllPending();
+            scheduleWithDelay(0);
+        } else {
+            int suggestedDelay = delayToUse();
+            Log.v(Log.TAG_BATCHER, "%s: calling scheduleWithDelay(%d)", this, suggestedDelay);
+            scheduleWithDelay(suggestedDelay);
+        }
+
     }
 
     public void waitForPendingFutures() {
@@ -184,9 +193,11 @@ public class Batcher<T> {
         // in case we ignored any schedule requests while processing, if
         // we have more items in inbox, lets schedule another processing attempt
         if (inbox.size() > 0) {
+            Log.v(Log.TAG_BATCHER, "%s: finished processing a batch, but inbox size > 0: %d", this, inbox.size());
             int delayToUse = 0;
             if (!processMoreImmediately) {
                 delayToUse = delayToUse();
+                Log.v(Log.TAG_BATCHER, "%s: going to process with delay: %d", this, delayToUse);
             }
             ScheduledFuture pendingFuture = workExecutor.schedule(processNowRunnable, delayToUse, TimeUnit.MILLISECONDS);
             pendingFutures.add(pendingFuture);
@@ -211,12 +222,8 @@ public class Batcher<T> {
                 futuresToForget.add(pendingFuture);
             }
         }
+        forgetExpiredFutures(futuresToForget);
 
-        // clean out expired futures we no longer care about
-        for (ScheduledFuture futureToForget : futuresToForget) {
-            Log.v(Log.TAG_BATCHER, "%s: forgetting about expired future: %s", this, futureToForget);
-            pendingFutures.remove(futureToForget);
-        }
 
         Log.v(Log.TAG_BATCHER, "%s: scheduleWithDelay called with delayMs: %d ms", this, suggestedDelay);
         scheduledDelay = suggestedDelay;
@@ -224,6 +231,30 @@ public class Batcher<T> {
         ScheduledFuture pendingFuture = workExecutor.schedule(processNowRunnable, suggestedDelay, TimeUnit.MILLISECONDS);
         Log.v(Log.TAG_BATCHER, "%s: created future: %s", this, pendingFuture);
         pendingFutures.add(pendingFuture);
+
+    }
+
+    private void forgetExpiredFutures(List<ScheduledFuture> futuresToForget) {
+        // clean out expired futures we no longer care about
+        for (ScheduledFuture futureToForget : futuresToForget) {
+            Log.v(Log.TAG_BATCHER, "%s: forgetting about expired future: %s", this, futureToForget);
+            pendingFutures.remove(futureToForget);
+        }
+    }
+
+    private void unscheduleAllPending() {
+
+        // keep a list of expired pending futures so we can remove them from pendingFutures
+        List<ScheduledFuture> futuresToForget = new ArrayList<ScheduledFuture>();
+
+        Iterator<ScheduledFuture> iterator = pendingFutures.iterator();
+        while (iterator.hasNext()) {
+            ScheduledFuture pendingFuture = iterator.next();
+            pendingFuture.cancel(true);
+            futuresToForget.add(pendingFuture);
+        }
+
+        forgetExpiredFutures(futuresToForget);
 
     }
 
@@ -238,16 +269,23 @@ public class Batcher<T> {
         //initially set the delayMs to the default value for this Batcher
         int delayToUse = delayMs;
 
-        //get the time interval since the last batch completed to the current system time
-        long delta = (System.currentTimeMillis() - lastProcessedTime);
+        // have we processed anything yet?  if so, check how long its been since we last
+        // processed something, and if it was longer than delayMs then use a 0 delay.
+        if (lastProcessedTime > 0) {
 
-        //if the time interval is greater or equal to the default delayMs then set the
-        // delayMs so that the next batch gets scheduled to process immediately
-        if (delta >= delayMs) {
-            delayToUse = 0;
+            //get the time interval since the last batch completed to the current system time
+            long delta = (System.currentTimeMillis() - lastProcessedTime);
+
+            //if the time interval is greater or equal to the default delayMs then set the
+            // delayMs so that the next batch gets scheduled to process immediately
+            if (delta >= delayMs) {
+                delayToUse = 0;
+            }
+
+            Log.v(Log.TAG_BATCHER, "%s: delayToUse() delta: %d, delayToUse: %d, delayMs: %d", this, delta, delayToUse, delayMs);
+
         }
 
-        Log.v(Log.TAG_BATCHER, "%s: delayToUse() delta: %d, delayToUse: %d, delayMs: %d", this, delta, delayToUse, delta);
 
         return delayToUse;
     }
