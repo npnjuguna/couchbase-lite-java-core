@@ -867,6 +867,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
                     try {
 
+                        // race condition workaround for https://github.com/couchbase/couchbase-lite-java-core/issues/383
+                        Thread.sleep(1 * 1000);
+
                         if (batcher != null) {
                             Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
                             batcher.waitForPendingFutures();
