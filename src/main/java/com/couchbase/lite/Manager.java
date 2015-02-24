@@ -70,7 +70,6 @@ public final class Manager {
 
     public static final String USER_AGENT = "CouchbaseLite/" + Version.getVersionName();
 
-    private static final ObjectMapper mapper = new ObjectMapper();
     private ManagerOptions options;
     private File directoryFile;
     private Map<String, Database> databases;
@@ -84,7 +83,8 @@ public final class Manager {
      */
     @InterfaceAudience.Private
     public static ObjectMapper getObjectMapper() {
-        return mapper;
+        // Always create new instance. Jackson's buffer-recycling suppresses heap memory on Android
+        return new ObjectMapper();
     }
 
     /**
